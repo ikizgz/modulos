@@ -2,24 +2,24 @@
 # -*- coding: utf-8 -*-
 
 """
-Limpia en un Excel las columnas 'First Name' y 'Last Name' en las N primeras hojas (por defecto 4)
+Limpia en un Excel las columnas TARGET_HEADERS de las constantes en las N primeras hojas (por defecto 2)
 **sin recrear hojas** (edición IN-PLACE con openpyxl), para **preservar** objetos de Excel como
-tablas dinámicas en otras hojas (p. ej., tu hoja 5). Convierte a MAYÚSCULAS, elimina acentos y
+tablas dinámicas en otras hojas. Convierte a MAYÚSCULAS, elimina acentos y
 caracteres no imprimibles, **respetando la Ñ** (que queda como Ñ mayúscula).
 
 USO RÁPIDO
 ----------
-    python limpia_nombres_excel.py --input ContactosWhatsappDepuracion20260210.xlsx \
-                                   --output ContactosWhatsappDepuracion20260210_LIMPIO.xlsx
+    python limpia_nombres_excel.py --input excel.xlsx \
+                                   --output excel_LIMPIO.xlsx
     # Si no indicas --dry-run, preguntará por consola (s/n).
 
 OPCIONES CLI
 ------------
 --input, -i        Ruta del Excel de entrada.
-                   Por defecto: "ContactosWhatsappDepuracion20260210.xlsx"
+                   Por defecto: "excel.xlsx"
 
 --output, -o       Ruta del Excel de salida.
-                   Por defecto: "ContactosWhatsappDepuracion20260210_LIMPIO.xlsx"
+                   Por defecto: "excel_LIMPIO.xlsx"
 
 --dry-run {on|off} Ejecuta en modo simulación (no guarda cambios) o guarda directamente.
                    - on  : Simulación (NO guarda, muestra lo que haría).
@@ -29,7 +29,7 @@ OPCIONES CLI
 --sheets N         Nº de hojas iniciales a procesar (por orden del libro). Por defecto: 4.
 
 --header-scan-rows N
-                   Nº de filas superiores donde buscar la fila de cabecera. Por defecto: 10.
+                   Nº de filas superiores donde buscar la fila de cabecera. Por defecto: 5.
 
 --samples N        Nº de ejemplos (antes → después) a mostrar por hoja. Por defecto: 5.
 
@@ -40,13 +40,13 @@ OPCIONES CLI
 EJEMPLOS
 --------
 1) Preguntar por dry-run y generar salida por defecto:
-   python limpia_nombres_excel.py -i ContactosWhatsappDepuracion20260210.xlsx
+   python limpia_nombres_excel.py -i excel.xlsx
 
 2) Forzar simulación (no guarda):
-   python limpia_nombres_excel.py -i ContactosWhatsappDepuracion20260210.xlsx -o out.xlsx --dry-run on
+   python limpia_nombres_excel.py -i excel.xlsx -o out.xlsx --dry-run on
 
 3) Guardar sin preguntar (crea backup y escribe out.xlsx):
-   python limpia_nombres_excel.py -i ContactosWhatsappDepuracion20260210.xlsx -o out.xlsx --dry-run off
+   python limpia_nombres_excel.py -i excel.xlsx -o out.xlsx --dry-run off
 
 NOTAS
 -----
@@ -72,13 +72,15 @@ from openpyxl.cell.cell import MergedCell
 from openpyxl.worksheet.worksheet import Worksheet
 
 # ------------------- CONSTANTES POR DEFECTO -------------------
-DEFAULT_INPUT_FILE = "ContactosWhatsappDepuracion20260210.xlsx"
-DEFAULT_OUTPUT_FILE = "ContactosWhatsappDepuracion20260210_LIMPIO.xlsx"
-NUM_SHEETS_TO_PROCESS = 4
-TARGET_HEADERS: Tuple[str, str] = ("First Name", "Last Name")
-HEADER_SCAN_ROWS = 10
-COLLAPSE_SPACES = True
-SHOW_SAMPLES_PER_SHEET = 5
+DEFAULT_INPUT_FILE = "excel.xlsx"  # Cambia a lo que corresponda
+DEFAULT_OUTPUT_FILE = "excel_LIMPIO.xlsx"  # Cambia a lo que corresponda
+NUM_SHEETS_TO_PROCESS = 2  # Número de hojas iniciales a procesar (por orden del libro)
+TARGET_HEADERS: Tuple[str, str] = ("Col1", "Col2")  # Cambia a lo que corresponda
+HEADER_SCAN_ROWS = 5  # Número de filas superiores a escanear para encontrar la cabecera
+COLLAPSE_SPACES = True  # Si True, colapsa múltiples espacios y NBSP a un único espacio y recorta extremos
+SHOW_SAMPLES_PER_SHEET = (
+    5  # Número de ejemplos (antes → después) a mostrar por hoja en el informe
+)
 # --------------------------------------------------------------
 
 
