@@ -26,7 +26,7 @@ OPCIONES CLI
                    - off : Guarda cambios (crea backup del original).
                    Si no se indica, el script PREGUNTA por consola.
 
---sheets N         Nº de hojas iniciales a procesar (por orden del libro). Por defecto: 4.
+--sheets N         Nº de hojas iniciales a procesar (por orden del libro). Por defecto: 2.
 
 --header-scan-rows N
                    Nº de filas superiores donde buscar la fila de cabecera. Por defecto: 5.
