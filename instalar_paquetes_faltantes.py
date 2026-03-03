@@ -1,3 +1,26 @@
+#!/usr/bin/env python3
+
+"""
+instalar_paquetes_faltantes.py
+
+read_requirements() usa parámetro por defecto: requirementes.txt.
+Puedes usar otro archivo, ejem: read_requirements("paquetes.txt") en main().
+
+Autor: Iñaki Izaguerri.
+Copyright (C) 2026 Iñaki Izaguerri
+
+Licencia: GPLv3
+Este programa es software libre: puedes redistribuirlo y/o modificarlo
+bajo los términos de la Licencia Pública General GNU publicada por la
+Free Software Foundation, ya sea la versión 3 de la Licencia, o
+(cualquier versión posterior).
+Este programa se distribuye con la esperanza de que sea útil,
+pero SIN NINGUNA GARANTÍA; sin siquiera la garantía implícita de
+COMERCIALIZACIÓN o IDONEIDAD PARA UN PROPÓSITO PARTICULAR.
+Deberías haber recibido una copia de la Licencia Pública General GNU
+junto con este programa. Si no, visita <https://www.gnu.org/licenses/>.
+"""
+
 import os
 import subprocess
 import sys
