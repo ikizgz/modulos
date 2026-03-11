@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""
+convertir_docs.py
+----------------
+Conversión recursiva de documentos antiguos a formatos modernos (DOCX o PDF)
+usando LibreOffice en modo headless.
+
+FUNCIONALIDADES:
+ - Conversión recursiva que respeta la estructura de carpetas.
+ - Entrada por argumentos o diálogo interactivo (--origen, --destino).
+ - Soporta: .doc, .dot, .rtf (ampliable con --ext).
+ - Conversión a DOCX o PDF mediante --to.
+ - Multiproceso opcional (--workers N).
+ - Log de progreso (tqdm).
+ - Archivo CSV con resultados (--csv).
+ - Reintentos en caso de fallos (2 intentos por archivo).
+ - Saltarse archivos ya convertidos.
+ - Mantener fecha de modificación original (--keep-time).
+ - Multiplataforma (Linux, Windows, macOS).
+ - Personalizable y extensible.
+
+USO BÁSICO:
+    python3 convertir_docs.py --origen /carpeta/origen --destino /carpeta/salida
+
+CON MULTIPROCESO:
+    python3 convertir_docs.py --origen /docs --destino /out --workers 4
+
+CONVERSIÓN A PDF:
+    python3 convertir_docs.py --origen /docs --destino /out --to pdf
+
+EXTENDER TIPOS DE ARCHIVO:
+    python3 convertir_docs.py --origen /docs --destino /out --ext .wps,.wpd
+
+ESPECIFICAR RUTA SOFFICE:
+    python3 convertir_docs.py --soffice "/usr/lib/libreoffice/program/soffice"
+
+Autor: Iñaki Izaguerri.
+Copyright (C) 2026 Iñaki Izaguerri
+
+Licencia: GPLv3
+Este programa es software libre: puedes redistribuirlo y/o modificarlo
+bajo los términos de la Licencia Pública General GNU publicada por la
+Free Software Foundation, ya sea la versión 3 de la Licencia, o
+(cualquier versión posterior).
+Este programa se distribuye con la esperanza de que sea útil,
+pero SIN NINGUNA GARANTÍA; sin siquiera la garantía implícita de
+COMERCIALIZACIÓN o IDONEIDAD PARA UN PROPÓSITO PARTICULAR.
+Deberías haber recibido una copia de la Licencia Pública General GNU
+junto con este programa. Si no, visita <https://www.gnu.org/licenses/>.
+"""
+
+import argparse
+import csv
+import multiprocessing
+import os
+import subprocess
+from functools import partial
+from pathlib import Path
+
+from tqdm import tqdm
+
+# ------------------------------
+# CONFIGURACIÓN
+# ------------------------------
+DEFAULT_EXTS = {".doc", ".dot", ".rtf"}
+MAX_REINTENTOS = 2
+
+
+def filtro_para(formato_out):
+    """Devuelve el filtro adecuado de LibreOffice según formato destino."""
+    formato_out = formato_out.lower()
+    if formato_out == "docx":
+        return "docx:Office Open XML Text"
+    elif formato_out == "pdf":
+        return "pdf:writer_pdf_Export"
+    else:
+        raise ValueError(f"Formato de salida no soportado: {formato_out}")
+
+
+# ------------------------------
+# FUNCIÓN DE CONVERSIÓN
+# ------------------------------
+def convertir_archivo(src, source_root, target_root, soffice, keep_time, filtro):
+    rel = Path(src).relative_to(source_root)
+    outdir = target_root / rel.parent
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    ext_dest = filtro.split(":")[0]  # docx o pdf
+    outfile = outdir / (Path(src).stem + f".{ext_dest}")
+
+    # Evitar repetir trabajo
+    if outfile.exists():
+        return (src, "skip", "Ya existía")
+
+    cmd = [
+        soffice,
+        "--headless",
+        "--convert-to",
+        filtro,
+        "--outdir",
+        str(outdir),
+        str(src),
+    ]
+
+    for intento in range(1, MAX_REINTENTOS + 1):
+        res = subprocess.run(cmd, capture_output=True, text=True)
+
+        if outfile.exists() and res.returncode == 0:
+            if keep_time:
+                ts = os.path.getmtime(src)
+                os.utime(outfile, (ts, ts))
+            return (src, "ok", f"Intento {intento}")
+
+    return (src, "fail", f"Returncode={res.returncode}, stderr={res.stderr.strip()}")
+
+
+# ------------------------------
+# LISTAR ARCHIVOS
+# ------------------------------
+def listar_archivos(origen, extensiones):
+    lista = []
+    for root, _, files in os.walk(origen):
+        for f in files:
+            suf = Path(f).suffix.lower()
+            if suf in extensiones:
+                if not f.lower().endswith(".docx"):
+                    lista.append(os.path.join(root, f))
+    return lista
+
+
+# ------------------------------
+# MAIN
+# ------------------------------
+def main():
+    parser = argparse.ArgumentParser(
+        description="Conversión recursiva DOC/DOT/RTF → DOCX o PDF usando LibreOffice."
+    )
+
+    parser.add_argument("--origen", help="Carpeta origen")
+    parser.add_argument("--destino", help="Carpeta destino")
+    parser.add_argument("--ext", help="Extensiones extra (.wps,.wpd)", default="")
+    parser.add_argument("--workers", type=int, default=1, help="Procesos paralelos")
+    parser.add_argument("--to", default="docx", help="Formato de salida: docx o pdf")
+    parser.add_argument(
+        "--keep-time", action="store_true", help="Mantener fecha original"
+    )
+    parser.add_argument("--soffice", default="soffice", help="Ruta a soffice")
+    parser.add_argument(
+        "--csv", default="resultado_conversion.csv", help="Informe en CSV"
+    )
+
+    args = parser.parse_args()
+
+    if not args.origen:
+        args.origen = input("Carpeta de origen: ").strip()
+    if not args.destino:
+        args.destino = input("Carpeta de destino: ").strip()
+
+    origen = Path(args.origen).expanduser().resolve()
+    destino = Path(args.destino).expanduser().resolve()
+    destino.mkdir(parents=True, exist_ok=True)
+
+    extensiones = set(DEFAULT_EXTS)
+    if args.ext:
+        extensiones |= {e.strip().lower() for e in args.ext.split(",")}
+
+    filtro = filtro_para(args.to)
+
+    print("\n🔍 Escaneando archivos...")
+    archivos = listar_archivos(origen, extensiones)
+    print(f"Se encontraron {len(archivos)} archivos.\n")
+
+    f_convertir = partial(
+        convertir_archivo,
+        source_root=origen,
+        target_root=destino,
+        soffice=args.soffice,
+        keep_time=args.keep_time,
+        filtro=filtro,
+    )
+
+    resultados = []
+
+    if args.workers > 1:
+        print(f"⚡ Usando {args.workers} procesos...")
+        with multiprocessing.Pool(args.workers) as pool:
+            for r in tqdm(
+                pool.imap_unordered(f_convertir, archivos), total=len(archivos)
+            ):
+                resultados.append(r)
+    else:
+        print("Modo secuencial…")
+        for src in tqdm(archivos):
+            resultados.append(f_convertir(src))
+
+    # Guardar CSV
+    print(f"\n📄 Guardando CSV en {args.csv} ...")
+    with open(args.csv, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["archivo", "estado", "detalle"])
+        for fila in resultados:
+            w.writerow(fila)
+
+    oks = sum(1 for r in resultados if r[1] == "ok")
+    fails = sum(1 for r in resultados if r[1] == "fail")
+    skips = sum(1 for r in resultados if r[1] == "skip")
+
+    print("\n===== RESUMEN =====")
+    print(f"✔ Correctos : {oks}")
+    print(f"↷ Saltados  : {skips}")
+    print(f"❌ Fallidos  : {fails}")
+    print("\n¡Finalizado! 🎉")
+
+
+if __name__ == "__main__":
+    main()
