@@ -1,5 +1,44 @@
 # -*- coding: utf-8 -*-
-# logging_utils.py
+
+"""
+Módulo de Utilidades de Logging
+===============================
+
+Este script proporciona una configuración centralizada para el manejo de logs 
+en aplicaciones Python. Configura automáticamente un doble flujo de salida:
+1.  **Consola:** Mensajes simplificados para monitoreo en tiempo real.
+2.  **Archivo:** Registro detallado en la carpeta `/logs` con marca de tiempo.
+
+Configuración rápida:
+---------------------
+1. Asegúrate de que este archivo (`logging_utils.py`) esté en el mismo directorio 
+   que tu script principal o en el PYTHONPATH.
+2. Importa la función `setup_logging`.
+
+Ejemplo de uso:
+---------------
+    from logging_utils import setup_logging
+    import logging
+
+    # 1. Inicializar al principio del script principal
+    setup_logging(app_name="mi_proceso_pdf")
+
+    # 2. Usar los comandos estándar de logging
+    logging.info("Iniciando el procesamiento de documentos...")
+    logging.warning("El archivo X no tiene el formato esperado.")
+    try:
+        # Tu código aquí
+        pass
+    except Exception as e:
+        logging.exception(f"Error crítico: {e}")
+    # si necesitas todo el traceback en el log como hace exception pero fuera de uno:
+    logging.error("Error crítico", exc_info=True)
+
+Estructura de archivos generada:
+--------------------------------
+El módulo creará automáticamente una carpeta `logs/` y archivos con el formato:
+`logs/nombre_app_YYYYMMDD_HHMMSS.log`
+"""
 
 import logging
 import os
