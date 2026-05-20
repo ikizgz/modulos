@@ -4,16 +4,24 @@
 Módulo de Utilidades de Logging
 ===============================
 
-Este script proporciona una configuración centralizada para el manejo de logs 
+Este script proporciona una configuración centralizada para el manejo de logs
 en aplicaciones Python. Configura automáticamente un doble flujo de salida:
 1.  **Consola:** Mensajes simplificados para monitoreo en tiempo real.
 2.  **Archivo:** Registro detallado en la carpeta `/logs` con marca de tiempo.
 
 Configuración rápida:
 ---------------------
-1. Asegúrate de que este archivo (`logging_utils.py`) esté en el mismo directorio 
+1. Asegúrate de que este archivo (`logging_utils.py`) esté en el mismo directorio
    que tu script principal o en el PYTHONPATH.
 2. Importa la función `setup_logging`.
+3. Establece el nivel de logging en # Root logger -> logger.setLevel(logging.??)
+    Por defecto, esto módulo tiene predefinidos 5 niveles (??) para los logs, ordenados de menor a mayor criticidad:
+    DEBUG
+    INFO
+    WARNING
+    ERROR
+    CRITICAL
+    Una vez establecido un determinado nivel, solo se muestran logs de esa criticidad o superior.
 
 Ejemplo de uso:
 ---------------
