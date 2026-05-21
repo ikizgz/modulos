@@ -177,12 +177,44 @@ def obtener_texto_visual(
     return "\n".join(lineas_visuales)
 
 
+def extraer_toc_existente(ruta_archivo: str) -> List[Dict]:
+    """Lee el TOC de un PDF y lo devuelve en formato lista de diccionarios."""
+    nombre_fichero = os.path.basename(ruta_archivo)
+    registros = []
+
+    try:
+        doc = fitz.open(ruta_archivo)
+        toc = doc.get_toc()
+
+        for item in toc:
+            # item es: [nivel, título, página_destino]
+            # Solo guardamos los de nivel 1 para mantener la coherencia
+            if item[0] == 1:
+                registros.append(
+                    {"archivo": nombre_fichero, "pagina": item[2], "titulo": item[1]}
+                )
+        doc.close()
+    except Exception as e:
+        logging.error(f"Error leyendo TOC de {nombre_fichero}: {e}")
+
+    return registros
+
+
 def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> List[Dict]:
     """
     Procesa cada archivo que se lee, detecta los títulos de los artículos, genera marcadores y guarda el PDF marcado.
     Devuelve una lista de diccionarios con los registros de títulos encontrados para crear índices posteriormente
     """
     nombre_fichero = os.path.basename(ruta_archivo)
+    # 1. Abrimos el documento para inspeccionarlo
+    documento_pdf = fitz.open(ruta_archivo)
+
+    # 2. Comprobación maestra: ¿Ya tiene marcadores (TOC)?
+    if documento_pdf.get_toc():
+        logging.info(f"Saltando: {nombre_fichero} (ya tiene marcadores).")
+        documento_pdf.close()
+        return []
+
     logging.info(f"Procesando: {nombre_fichero}")
 
     registros_archivo: List[Dict] = []
@@ -254,11 +286,7 @@ def recorrer_y_procesar(directorio_raiz: str):
         if "Marcados" in root:
             continue
 
-        pdf_files = [
-            f
-            for f in files
-            if f.lower().endswith(".pdf") and "_marcado" not in f.lower()
-        ]
+        pdf_files = [f for f in files if f.lower().endswith(".pdf")]
 
         if not pdf_files:
             continue
@@ -270,22 +298,45 @@ def recorrer_y_procesar(directorio_raiz: str):
 
         for archivo in pdf_files:
             ruta_completa = os.path.join(root, archivo)
-            # Procesamos y extendemos el histórico global directamente
-            datos = procesar_archivo_ibercaja(ruta_completa, carpeta_salida)
-            historico_global.extend(datos)
+
+            # Abrimos temporalmente para verificar
+            doc_tmp = fitz.open(ruta_completa)
+            tiene_marcadores = len(doc_tmp.get_toc()) > 0
+            doc_tmp.close()
+
+            if tiene_marcadores:
+                logging.info(f"Archivo ya marcado: {archivo}. Extrayendo TOC...")
+                datos = extraer_toc_existente(ruta_completa)
+                historico_global.extend(datos)
+            else:
+                # Si no tiene, lo procesamos desde cero
+                datos = procesar_archivo_ibercaja(ruta_completa, carpeta_salida)
+                historico_global.extend(datos)
 
     # Una vez terminados todos los directorios, generamos el CSV único en la raíz
     if historico_global:
-        ruta_indice_unico = os.path.join(directorio_raiz, "Indice_Global_Marcados.csv")
-        with open(ruta_indice_unico, mode="w", encoding="utf-8-sig", newline="") as f:
+        ruta_indice_unico = os.path.join(directorio_raiz, "Indice_Global_Normativa.csv")
+
+        # Comprobamos si el archivo ya existe para saber si debemos escribir cabecera
+        archivo_existe = os.path.isfile(ruta_indice_unico)
+
+        # Abrimos en modo 'a' (append) para añadir al final
+        with open(ruta_indice_unico, mode="a", encoding="utf-8-sig", newline="") as f:
             writer = csv.DictWriter(
                 f, fieldnames=["archivo", "pagina", "titulo"], delimiter=";"
             )
-            writer.writeheader()
+
+            # Solo escribimos la cabecera si el archivo es nuevo
+            if not archivo_existe:
+                writer.writeheader()
+
             writer.writerows(historico_global)
-        logging.info(f"\n>> ÍNDICE GLOBAL GENERADO: {ruta_indice_unico}")
+
+        logging.info(f"\n>> ÍNDICE GLOBAL ACTUALIZADO: {ruta_indice_unico}")
     else:
-        logging.warning("\nNo se encontraron datos para generar el índice global.")
+        logging.warning(
+            "\nNo se encontraron datos nuevos para añadir al índice global."
+        )
 
 
 if __name__ == "__main__":
