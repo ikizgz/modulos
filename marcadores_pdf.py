@@ -296,22 +296,31 @@ def recorrer_y_procesar(directorio_raiz: str):
         if not os.path.exists(carpeta_salida):
             os.makedirs(carpeta_salida)
 
-        for archivo in pdf_files:
-            ruta_completa = os.path.join(root, archivo)
+    for archivo in pdf_files:
+        ruta_completa = os.path.join(root, archivo)
 
-            # Abrimos temporalmente para verificar
+        # PROTECCIÓN: Cada archivo es una unidad independiente
+        try:
+            # 1. Verificar TOC (si ya está marcado, extraemos info)
             doc_tmp = fitz.open(ruta_completa)
             tiene_marcadores = len(doc_tmp.get_toc()) > 0
             doc_tmp.close()
 
             if tiene_marcadores:
-                logging.info(f"Archivo ya marcado: {archivo}. Extrayendo TOC...")
+                logging.info(f"Saltando y extrayendo TOC: {archivo}")
                 datos = extraer_toc_existente(ruta_completa)
                 historico_global.extend(datos)
             else:
-                # Si no tiene, lo procesamos desde cero
+                # 2. Si no tiene, procesamos desde cero
                 datos = procesar_archivo_ibercaja(ruta_completa, carpeta_salida)
                 historico_global.extend(datos)
+
+        except Exception as e:
+            # Si un archivo falla, lo anotamos pero el bucle NO se detiene
+            logging.error(
+                f"FALLO CRÍTICO en el archivo {archivo}: {e}. Continuando con el siguiente..."
+            )
+            continue  # Esta línea es la clave: salta al siguiente archivo sin detener el proceso global
 
     # Una vez terminados todos los directorios, generamos el CSV único en la raíz
     if historico_global:
