@@ -3,7 +3,7 @@
 
 """
 Script para crear marcadores en los archivos pdf de la normativa
-contenidos en la carpeta que se le pase como directorio_base en __main__
+contenidos en la carpeta que se le pase como 'directorio_base' en '__main__'
 y sus subcarpetas. Crea un índice con los que ya tienen marcadores y los
 nuevos tratados.
 """
