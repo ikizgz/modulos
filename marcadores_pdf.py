@@ -1,7 +1,18 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Script para crear marcadores en los archivos pdf de la normativa
+contenidos en la carpeta que se le pase como directorio_base en __main__
+y sus subcarpetas. Crea un índice con los que ya tienen marcadores y los
+nuevos tratados.
+"""
+
 import csv
 import logging
 import os
 import re
+import unicodedata
 from typing import Dict, List, cast
 
 import fitz  # PyMuPDF
@@ -16,6 +27,32 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
+
+
+def limpiar_titulo_para_indice(texto: str) -> str:
+    """Aplica la limpieza de tu script de Excel: sin acentos, mayúsculas, respeta Ñ y colapsa espacios."""
+    if not texto:
+        return ""
+
+    # Proteger la Ñ/ñ
+    texto = texto.replace("Ñ", "__ENIE_MAYUS__").replace("ñ", "__ENIE_MINUS__")
+
+    # Quitar acentos (diacríticos)
+    texto = "".join(
+        c
+        for c in unicodedata.normalize("NFD", texto)
+        if unicodedata.category(c) != "Mn"
+    )
+
+    # Restaurar la Ñ y pasar a mayúsculas
+    texto = texto.replace("__ENIE_MAYUS__", "Ñ").replace("__ENIE_MINUS__", "Ñ")
+    texto = texto.upper()
+
+    # Quitar no imprimibles y colapsar espacios
+    texto = "".join(c for c in texto if c.isprintable())
+    texto = re.sub(r"[ \t\u00A0]+", " ", texto).strip()
+
+    return texto
 
 
 def limpiar_linea_titulo(linea: str) -> str:
@@ -190,8 +227,14 @@ def extraer_toc_existente(ruta_archivo: str) -> List[Dict]:
             # item es: [nivel, título, página_destino]
             # Solo guardamos los de nivel 1 para mantener la coherencia
             if item[0] == 1:
+                # AQUÍ: Limpiamos el título justo antes de mandarlo al CSV
+                titulo_limpio = limpiar_titulo_para_indice(item[1])
                 registros.append(
-                    {"archivo": nombre_fichero, "pagina": item[2], "titulo": item[1]}
+                    {
+                        "archivo": nombre_fichero,
+                        "pagina": item[2],
+                        "titulo": titulo_limpio,
+                    }
                 )
         doc.close()
     except Exception as e:
@@ -242,12 +285,17 @@ def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> List[D
             if tiene_bloque_consultas:
                 titulos_pagina = descubrir_titulos_visuales(texto_visual)
                 for titulo in titulos_pagina:
+                    # El PDF lo marcamos con el título original (queda más bonito visualmente)
                     lista_marcadores_final.append([1, titulo, num_pag + 1])
+
+                    # AQUÍ: Pero al CSV mandamos la versión limpia para las búsquedas
+                    titulo_limpio = limpiar_titulo_para_indice(titulo)
+
                     registros_archivo.append(
                         {
                             "archivo": nombre_fichero,
                             "pagina": num_pag + 1,
-                            "titulo": titulo,
+                            "titulo": titulo_limpio,
                         }
                     )
 
