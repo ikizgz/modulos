@@ -77,7 +77,6 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from openpyxl import load_workbook
@@ -86,10 +85,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 # ------------------- CONSTANTES POR DEFECTO -------------------
 DEFAULT_INPUT_FILE = "excel.xlsx"
-# Tomamos el nombre base, le añadimos el sufijo y lo convertimos de nuevo a cadena (str)
-DEFAULT_OUTPUT_FILE = str(
-    Path(DEFAULT_INPUT_FILE).with_stem(f"{Path(DEFAULT_INPUT_FILE).stem}_LIMPIO")
-)
+# Construcción dinámica del output usando os.path para mantener la extensión original y añadir sufijo _LIMPIO
+_base, _ext = os.path.splitext(DEFAULT_INPUT_FILE)
+DEFAULT_OUTPUT_FILE = f"{_base}_LIMPIO{_ext}"
 NUM_SHEETS_TO_PROCESS = 1
 HEADER_SCAN_ROWS = 5
 COLLAPSE_SPACES = True
@@ -191,6 +189,7 @@ def get_active_columns(
 # ------------------------- BACKUP ------------------------------
 def backup_file(path: str) -> str:
     """Crea una copia de seguridad con timestamp y devuelve su ruta."""
+    # Generamos el nombre del archivo con os.path para mantener la extensión original y añadir un sufijo de backup con timestamp
     base, ext = os.path.splitext(path)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = f"{base}_BACKUP_{ts}{ext}"
