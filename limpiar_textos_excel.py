@@ -77,7 +77,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import List, Optional, Sequence, Tuple, Dict
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
@@ -85,7 +86,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 # ------------------- CONSTANTES POR DEFECTO -------------------
 DEFAULT_INPUT_FILE = "excel.xlsx"
-DEFAULT_OUTPUT_FILE = "excel_LIMPIO.xlsx"
+# Tomamos el nombre base, le añadimos el sufijo y lo convertimos de nuevo a cadena (str)
+DEFAULT_OUTPUT_FILE = str(
+    Path(DEFAULT_INPUT_FILE).with_stem(f"{Path(DEFAULT_INPUT_FILE).stem}_LIMPIO")
+)
 NUM_SHEETS_TO_PROCESS = 1
 HEADER_SCAN_ROWS = 5
 COLLAPSE_SPACES = True
@@ -156,7 +160,9 @@ def find_header_row(ws: Worksheet, scan_rows: int) -> Optional[int]:
     max_scan = min(ws.max_row, scan_rows)
     for r in range(1, max_scan + 1):
         # Si la fila contiene al menos algún valor de texto no vacío, la asumimos como cabecera
-        if any(cell.value is not None and str(cell.value).strip() != "" for cell in ws[r]):
+        if any(
+            cell.value is not None and str(cell.value).strip() != "" for cell in ws[r]
+        ):
             return r
     return None
 
@@ -168,14 +174,14 @@ def get_active_columns(
     excluyendo las solicitadas por el usuario."""
     exclude_lower = {h.strip().lower() for h in exclude_headers}
     columns_map: Dict[int, str] = {}
-    
+
     for cell in ws[header_row]:
         raw = cell.value
         if raw is not None:
             header_name = str(raw).strip()
             if header_name.lower() not in exclude_lower and cell.column is not None:
                 columns_map[cell.column] = header_name
-                
+
     return columns_map
 
 
@@ -229,7 +235,7 @@ def process_sheet(
 
         for col_idx, col_name in columns_to_process.items():
             cell = ws.cell(row=r, column=col_idx)
-            
+
             # Evitar celdas combinadas no-maestras
             if not isinstance(cell, MergedCell):
                 before = cell.value
@@ -290,7 +296,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help=f"Nº de muestras a mostrar por hoja (por defecto {SHOW_SAMPLES_PER_SHEET})",
     )
     parser.add_argument(
-        "--exclude", "-e",
+        "--exclude",
+        "-e",
         nargs="+",
         default=DEFAULT_EXCLUDES,
         help="Lista de cabeceras de columnas a EXCLUIR del procesado (separadas por espacios)",
@@ -372,7 +379,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     for idx, sname in enumerate(to_process, start=1):
         ws: Worksheet = wb[sname]
         print(f"\n→ Procesando [{idx}] hoja '{sname}' ...")
-        rep = process_sheet(ws, idx, dry_run=dry_run, show_samples=args.samples, exclude_headers=exclude_headers)
+        rep = process_sheet(
+            ws,
+            idx,
+            dry_run=dry_run,
+            show_samples=args.samples,
+            exclude_headers=exclude_headers,
+        )
         reports.append(rep)
 
         if rep.header_row is None:
@@ -391,7 +404,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not dry_run:
         wb.save(output_file)
         print("\n✅ Archivo guardado:", output_file)
-        print("ℹ️  Las hojas restantes (p. ej. con tablas dinámicas) NO se han modificado.")
+        print(
+            "ℹ️  Las hojas restantes (p. ej. con tablas dinámicas) NO se han modificado."
+        )
 
     # Resumen global
     total_cells = sum(r.total_cells_changed for r in reports)
