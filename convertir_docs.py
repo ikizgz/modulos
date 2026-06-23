@@ -177,7 +177,7 @@ def main():
         "--keep-time", action="store_true", help="Mantener fecha original"
     )
 
-    # 2. Usar la variable detectada como 'default'
+    # 2. Usar la variable detectada como 'default' para el argumento --soffice
     parser.add_argument("--soffice", default=soffice_default, help="Ruta a soffice")
     parser.add_argument(
         "--csv",
@@ -188,9 +188,14 @@ def main():
     args = parser.parse_args()
 
     if not args.origen:
-        args.origen = input("Carpeta de origen: ").strip()
+        user_input = input("Carpeta de origen [por defecto: ./]: ").strip()
+        # Si el usuario pulsa Intro sin mirar, le asignamos './'
+        args.origen = user_input if user_input else "./"
+
     if not args.destino:
-        args.destino = input("Carpeta de destino: ").strip()
+        user_input = input("Carpeta de destino [por defecto: ./]: ").strip()
+        # Si el usuario pulsa Intro sin mirar, le asignamos './'
+        args.destino = user_input if user_input else "./"
 
     origen = Path(args.origen).expanduser().resolve()
     destino = Path(args.destino).expanduser().resolve()
