@@ -54,9 +54,9 @@ import csv
 import multiprocessing
 import os
 import platform  # para detectar el sistema operativo
-import shutil
+import shutil  # para mover archivos
 import subprocess
-import tempfile
+import tempfile  # para usar una carpeta temporal local
 from functools import partial
 from pathlib import Path
 
@@ -91,13 +91,10 @@ def convertir_archivo(src, source_root, target_root, soffice, keep_time, filtro)
     ext_dest = filtro.split(":")[0]  # docx o pdf
     outfile = outdir / (Path(src).stem + f".{ext_dest}")
 
-    # Evitar repetir trabajo
     if outfile.exists():
         return (src, "skip", "Ya existía")
 
-    # USAR CARPETA TEMPORAL LOCAL PARA EL PROCESO DE SOFFICE
-    # Haciendo esto, LibreOffice solo leerá de la red (lo cual suele fallar mucho menos)
-    # y escribirá en local de forma segura, delegando en Python la escritura final en el NAS.
+    # CONVERSIÓN EN LOCAL (Rápida y segura)
     with tempfile.TemporaryDirectory() as tmpdir:
         cmd = [
             soffice,
@@ -105,24 +102,26 @@ def convertir_archivo(src, source_root, target_root, soffice, keep_time, filtro)
             "--convert-to",
             filtro,
             "--outdir",
-            tmpdir,  # Escribe localmente en el SSD/HDD de tu PC
+            tmpdir,
             str(src),
         ]
 
         for intento in range(1, MAX_REINTENTOS + 1):
             res = subprocess.run(cmd, capture_output=True, text=True)
 
-            # Buscamos el archivo generado en la carpeta temporal
+            # Comprobamos si se generó en el Temp local
             tmp_outfile = Path(tmpdir) / (Path(src).stem + f".{ext_dest}")
 
             if tmp_outfile.exists() and res.returncode == 0:
-                # Si se creó bien localmente, lo movemos a la ruta de red
-                shutil.move(str(tmp_outfile), str(outfile))
-
-                if keep_time:
-                    ts = os.path.getmtime(src)
-                    os.utime(outfile, (ts, ts))
-                return (src, "ok", f"Intento {intento}")
+                try:
+                    # Python se encarga del envío limpio a la red
+                    shutil.move(str(tmp_outfile), str(outfile))
+                    if keep_time:
+                        ts = os.path.getmtime(src)
+                        os.utime(outfile, (ts, ts))
+                    return (src, "ok", f"Intento {intento}")
+                except Exception as e:
+                    return (src, "fail", f"Error al mover al destino: {str(e)}")
 
         return (
             src,
@@ -181,7 +180,9 @@ def main():
     # 2. Usar la variable detectada como 'default'
     parser.add_argument("--soffice", default=soffice_default, help="Ruta a soffice")
     parser.add_argument(
-        "--csv", default="resultado_conversion.csv", help="Informe en CSV"
+        "--csv",
+        default="resultado_conversion.csv",
+        help="Informe en CSV (se guardará en la carpeta destino si es un nombre relativo)",
     )
 
     args = parser.parse_args()
@@ -194,6 +195,12 @@ def main():
     origen = Path(args.origen).expanduser().resolve()
     destino = Path(args.destino).expanduser().resolve()
     destino.mkdir(parents=True, exist_ok=True)
+    # Enrutar el CSV a la carpeta destino
+    ruta_csv = Path(args.csv)
+    # Si el usuario no ha puesto una ruta absoluta (ej. C:\informe.csv),
+    # lo metemos dentro de la carpeta destino
+    if not ruta_csv.is_absolute():
+        ruta_csv = destino / ruta_csv
 
     extensiones = set(DEFAULT_EXTS)
     if args.ext:
@@ -229,8 +236,8 @@ def main():
             resultados.append(f_convertir(src))
 
     # Guardar CSV
-    print(f"\n📄 Guardando CSV en {args.csv} ...")
-    with open(args.csv, "w", newline="", encoding="utf-8") as f:
+    print(f"\n📄 Guardando CSV en {ruta_csv} ...")
+    with open(ruta_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["archivo", "estado", "detalle"])
         for fila in resultados:
