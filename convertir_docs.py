@@ -54,7 +54,9 @@ import csv
 import multiprocessing
 import os
 import platform  # para detectar el sistema operativo
+import shutil
 import subprocess
+import tempfile
 from functools import partial
 from pathlib import Path
 
@@ -93,26 +95,40 @@ def convertir_archivo(src, source_root, target_root, soffice, keep_time, filtro)
     if outfile.exists():
         return (src, "skip", "Ya existía")
 
-    cmd = [
-        soffice,
-        "--headless",
-        "--convert-to",
-        filtro,
-        "--outdir",
-        str(outdir),
-        str(src),
-    ]
+    # USAR CARPETA TEMPORAL LOCAL PARA EL PROCESO DE SOFFICE
+    # Haciendo esto, LibreOffice solo leerá de la red (lo cual suele fallar mucho menos)
+    # y escribirá en local de forma segura, delegando en Python la escritura final en el NAS.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cmd = [
+            soffice,
+            "--headless",
+            "--convert-to",
+            filtro,
+            "--outdir",
+            tmpdir,  # Escribe localmente en el SSD/HDD de tu PC
+            str(src),
+        ]
 
-    for intento in range(1, MAX_REINTENTOS + 1):
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        for intento in range(1, MAX_REINTENTOS + 1):
+            res = subprocess.run(cmd, capture_output=True, text=True)
 
-        if outfile.exists() and res.returncode == 0:
-            if keep_time:
-                ts = os.path.getmtime(src)
-                os.utime(outfile, (ts, ts))
-            return (src, "ok", f"Intento {intento}")
+            # Buscamos el archivo generado en la carpeta temporal
+            tmp_outfile = Path(tmpdir) / (Path(src).stem + f".{ext_dest}")
 
-    return (src, "fail", f"Returncode={res.returncode}, stderr={res.stderr.strip()}")
+            if tmp_outfile.exists() and res.returncode == 0:
+                # Si se creó bien localmente, lo movemos a la ruta de red
+                shutil.move(str(tmp_outfile), str(outfile))
+
+                if keep_time:
+                    ts = os.path.getmtime(src)
+                    os.utime(outfile, (ts, ts))
+                return (src, "ok", f"Intento {intento}")
+
+        return (
+            src,
+            "fail",
+            f"Returncode={res.returncode}, stderr={res.stderr.strip()}",
+        )
 
 
 # ------------------------------
