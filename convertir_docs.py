@@ -53,6 +53,7 @@ import argparse
 import csv
 import multiprocessing
 import os
+import platform  # para detectar el sistema operativo
 import subprocess
 from functools import partial
 from pathlib import Path
@@ -136,6 +137,22 @@ def main():
         description="Conversión recursiva DOC/DOT/RTF → DOCX o PDF usando LibreOffice."
     )
 
+    # 1. Detectar la ruta por defecto según el Sistema Operativo
+    if platform.system() == "Windows":
+        # Rutas típicas en Windows (64-bit y 32-bit)
+        ruta_64 = r"C:\Program Files\LibreOffice\program\soffice.exe"
+        ruta_32 = r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"
+
+        if os.path.exists(ruta_64):
+            soffice_default = ruta_64
+        elif os.path.exists(ruta_32):
+            soffice_default = ruta_32
+        else:
+            soffice_default = "soffice.exe"  # Si no se encuentra, dejamos el fallback
+    else:
+        # Linux / macOS
+        soffice_default = "soffice"
+
     parser.add_argument("--origen", help="Carpeta origen")
     parser.add_argument("--destino", help="Carpeta destino")
     parser.add_argument("--ext", help="Extensiones extra (.wps,.wpd)", default="")
@@ -144,7 +161,9 @@ def main():
     parser.add_argument(
         "--keep-time", action="store_true", help="Mantener fecha original"
     )
-    parser.add_argument("--soffice", default="soffice", help="Ruta a soffice")
+
+    # 2. Usar la variable detectada como 'default'
+    parser.add_argument("--soffice", default=soffice_default, help="Ruta a soffice")
     parser.add_argument(
         "--csv", default="resultado_conversion.csv", help="Informe en CSV"
     )
