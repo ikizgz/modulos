@@ -29,7 +29,7 @@ Ejemplo de uso:
     import logging
 
     # 1. Inicializar al principio del script principal
-    setup_logging(app_name="mi_proceso_pdf")
+    setup_logging(app_name="mi_proceso_pdf", target_dir="ruta/a/mi/carpeta")
 
     # 2. Usar los comandos estándar de logging
     logging.info("Iniciando el procesamiento de documentos...")
@@ -52,22 +52,29 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 
-def setup_logging(app_name: str = "app"):
+def setup_logging(app_name: str = "app", target_dir: str | Path | None = None):
     """
     Configura logging en consola + archivo logs/<app_name>_YYYYMMDD_HHMMSS.log
 
     app_name: nombre base del archivo de log (ej. "actualizar_bd", "preprocesador")
+    target_dir: ruta base opcional donde se guardará la carpeta 'logs'. Si es None, se usa './logs'
     """
 
+    # Determinar el directorio de destino de forma dinámica y segura
+    if target_dir is not None:
+        log_dir = Path(target_dir) / "logs"
+    else:
+        log_dir = Path("logs")
+
     # Crear directorio logs si no existe
-    log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
 
     # Archivo nuevo para cada ejecución
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = os.path.join(log_dir, f"{app_name}_{timestamp}.log")
+    log_path = log_dir / f"{app_name}_{timestamp}.log"
 
     # Root logger
     logger = logging.getLogger()
@@ -82,7 +89,7 @@ def setup_logging(app_name: str = "app"):
     console_formatter = logging.Formatter("[%(levelname)s] %(message)s")
 
     # Handler archivo
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler = logging.FileHandler(str(log_path), encoding="utf-8")
     file_handler.setFormatter(file_formatter)
     logger.addHandler(file_handler)
 
