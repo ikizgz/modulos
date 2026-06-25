@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
 convertir_docs.py
 ----------------
 Conversión recursiva de documentos antiguos a formatos modernos (DOCX o PDF)
-usando LibreOffice en modo headless.
+usando LibreOffice en modo headless con registro centralizado de LOGS.
 
 FUNCIONALIDADES:
  - Conversión recursiva que respeta la estructura de carpetas.
  - Entrada por argumentos o diálogo interactivo (--origen, --destino).
- - Soporta: .doc, .dot, .rtf (ampliable con --ext).
+ - Soporta: DEFAULT_EXTS = {".doc", ".dot", ".rtf"} (ampliable con --ext).
  - Conversión a DOCX o PDF mediante --to.
  - Multiproceso opcional (--workers N).
  - Log de progreso (tqdm).
- - Archivo CSV con resultados (--csv).
- - Reintentos en caso de fallos (2 intentos por archivo).
+ - Reintentos en caso de fallos (MAX_REINTENTOS = 2 intentos por archivo).
  - Saltarse archivos ya convertidos.
  - Mantener fecha de modificación original (--keep-time).
  - Multiplataforma (Linux, Windows, macOS).
@@ -50,7 +51,7 @@ junto con este programa. Si no, visita <https://www.gnu.org/licenses/>.
 """
 
 import argparse
-import csv
+import logging
 import multiprocessing
 import os
 import platform  # para detectar el sistema operativo
@@ -61,6 +62,9 @@ from functools import partial
 from pathlib import Path
 
 from tqdm import tqdm
+
+# logging_utils.py es un módulo auxiliar para configurar el logging de manera centralizada
+from logging_utils import setup_logging
 
 # ------------------------------
 # CONFIGURACIÓN
@@ -92,7 +96,7 @@ def convertir_archivo(src, source_root, target_root, soffice, keep_time, filtro)
     outfile = outdir / (Path(src).stem + f".{ext_dest}")
 
     if outfile.exists():
-        return (src, "skip", "Ya existía")
+        return (src, "skip", "Ya existía el archivo de salida")
 
     # CONVERSIÓN EN LOCAL (Rápida y segura)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -119,14 +123,14 @@ def convertir_archivo(src, source_root, target_root, soffice, keep_time, filtro)
                     if keep_time:
                         ts = os.path.getmtime(src)
                         os.utime(outfile, (ts, ts))
-                    return (src, "ok", f"Intento {intento}")
+                    return (src, "ok", f"Convertido en intento {intento}")
                 except Exception as e:
                     return (src, "fail", f"Error al mover al destino: {str(e)}")
 
         return (
             src,
             "fail",
-            f"Returncode={res.returncode}, stderr={res.stderr.strip()}",
+            f"Fallo en conversión (Returncode={res.returncode}, stderr={res.stderr.strip()})",
         )
 
 
@@ -176,14 +180,13 @@ def main():
     parser.add_argument(
         "--keep-time", action="store_true", help="Mantener fecha original"
     )
-
+    parser.add_argument(
+        "--delete-original",
+        action="store_true",
+        help="Borrar el archivo original tras una conversión exitosa",
+    )
     # 2. Usar la variable detectada como 'default' para el argumento --soffice
     parser.add_argument("--soffice", default=soffice_default, help="Ruta a soffice")
-    parser.add_argument(
-        "--csv",
-        default="resultado_conversion.csv",
-        help="Informe en CSV (se guardará en la carpeta destino si es un nombre relativo)",
-    )
 
     args = parser.parse_args()
 
@@ -200,12 +203,9 @@ def main():
     origen = Path(args.origen).expanduser().resolve()
     destino = Path(args.destino).expanduser().resolve()
     destino.mkdir(parents=True, exist_ok=True)
-    # Enrutar el CSV a la carpeta destino
-    ruta_csv = Path(args.csv)
-    # Si el usuario no ha puesto una ruta absoluta (ej. C:\informe.csv),
-    # lo metemos dentro de la carpeta destino
-    if not ruta_csv.is_absolute():
-        ruta_csv = destino / ruta_csv
+
+    # Pasamos la carpeta destino del log directamente aquí
+    setup_logging(app_name="convertir_docs", target_dir=destino)
 
     extensiones = set(DEFAULT_EXTS)
     if args.ext:
@@ -213,9 +213,9 @@ def main():
 
     filtro = filtro_para(args.to)
 
-    print("\n🔍 Escaneando archivos...")
+    logging.info("🔍 Escaneando archivos de origen...")
     archivos = listar_archivos(origen, extensiones)
-    print(f"Se encontraron {len(archivos)} archivos.\n")
+    logging.info(f"Se encontraron {len(archivos)} archivos aptos para procesar.")
 
     f_convertir = partial(
         convertir_archivo,
@@ -229,34 +229,61 @@ def main():
     resultados = []
 
     if args.workers > 1:
-        print(f"⚡ Usando {args.workers} procesos...")
+        logging.info(f"⚡ Iniciando multiproceso con {args.workers} workers...")
         with multiprocessing.Pool(args.workers) as pool:
             for r in tqdm(
                 pool.imap_unordered(f_convertir, archivos), total=len(archivos)
             ):
                 resultados.append(r)
     else:
-        print("Modo secuencial…")
+        logging.info("Modo secuencial activo…")
         for src in tqdm(archivos):
             resultados.append(f_convertir(src))
 
-    # Guardar CSV
-    print(f"\n📄 Guardando CSV en {ruta_csv} ...")
-    with open(ruta_csv, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["archivo", "estado", "detalle"])
-        for fila in resultados:
-            w.writerow(fila)
+    # Volcar todos los resultados de la conversión al archivo de registro
+    for src_path, estado, detalle in resultados:
+        msg = f"Archivo: {src_path} | Estado: [{estado.upper()}] | Detalle: {detalle}"
+        if estado == "ok":
+            logging.info(msg)
+        elif estado == "skip":
+            logging.info(msg)
+        else:
+            logging.error(msg)
+
+    # Post-procesado seguro: Borrado de archivos originales si se activa la flag
+    deleted_count = 0
+    if args.delete_original:
+        logging.info(
+            "🗑️  Iniciando proceso de limpieza de archivos originales convertidos..."
+        )
+        for src_path, estado, _ in resultados:
+            if estado == "ok":
+                try:
+                    os.remove(src_path)
+                    deleted_count += 1
+                    logging.info(f"Eliminado original correctamente: {src_path}")
+                except Exception as e:
+                    logging.error(
+                        f"❌ Error crítico al intentar eliminar {src_path}. Detalle del sistema: {e}",
+                        exc_info=True,
+                    )
 
     oks = sum(1 for r in resultados if r[1] == "ok")
     fails = sum(1 for r in resultados if r[1] == "fail")
     skips = sum(1 for r in resultados if r[1] == "skip")
 
-    print("\n===== RESUMEN =====")
-    print(f"✔ Correctos : {oks}")
-    print(f"↷ Saltados  : {skips}")
-    print(f"❌ Fallidos  : {fails}")
-    print("\n¡Finalizado! 🎉")
+    # Resumen final
+    logging.info("===== RESUMEN DE EJECUCIÓN =====")
+    logging.info(f"✔ Correctos : {oks}")
+    if args.delete_original:
+        logging.info(f"🗑  Borrados  : {deleted_count}")
+        if deleted_count < oks:
+            logging.warning(
+                f"⚠️  Atención: {oks - deleted_count} archivos 'ok' no pudieron ser eliminados. Revisa los errores previos."
+            )
+    logging.info(f"↷ Saltados  : {skips}")
+    logging.info(f"❌ Fallidos  : {fails}")
+    logging.info("¡Proceso finalizado! 🎉")
 
 
 if __name__ == "__main__":
