@@ -200,11 +200,38 @@ def main():
         # Si el usuario pulsa Intro sin mirar, le asignamos './'
         args.destino = user_input if user_input else "./"
 
-    origen = Path(args.origen).expanduser().resolve()
-    destino = Path(args.destino).expanduser().resolve()
-    destino.mkdir(parents=True, exist_ok=True)
+    # Validación y resolución segura de rutas
+    try:
+        origen = Path(args.origen).expanduser().resolve()
+        destino = Path(args.destino).expanduser().resolve()
 
-    # Pasamos la carpeta destino del log directamente aquí
+        # Comprobar primero si la carpeta origen realmente existe
+        if not origen.exists():
+            print(f"❌ Error: La carpeta de origen no existe:\n   '{origen}'")
+            return 1
+
+        if not origen.is_dir():
+            print(
+                f"❌ Error: La ruta de origen especificada no es un directorio válido:\n   '{origen}'"
+            )
+            return 1
+
+        # Intentar crear la carpeta destino de forma segura
+        destino.mkdir(parents=True, exist_ok=True)
+
+    except (OSError, FileNotFoundError) as e:
+        print("\n" + "!" * 70)
+        print(
+            "❌ ERROR CRÍTICO: La sintaxis o los caracteres de las rutas no son válidos."
+        )
+        print(f"   Detalle del sistema: {e}")
+        print(
+            "   Por favor, revisa que no hayas duplicado letras de unidad (ej. U:) o metido caracteres prohibidos."
+        )
+        print("!" * 70 + "\n")
+        return 1
+
+    # ¡Ahora pasamos la carpeta destino directamente aquí habiendo asegurado que es correcta!
     setup_logging(app_name="convertir_docs", target_dir=destino)
 
     extensiones = set(DEFAULT_EXTS)
