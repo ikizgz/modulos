@@ -37,7 +37,17 @@ imprimibles, **respetando la Ñ** (que queda como Ñ mayúscula).
 
 Módulo que contiene una función para calcular el factorial de un número entero.
 
-## Python_plantilla_encabezado.py
+## python_plantilla_encabezado.py
 
 Plantilla de inicio para archivos Python, con un encabezado de licencia y
 metadatos.
+
+## logging_utils.py
+
+Módulo para implementar facilmente logs en los scripts.
+
+## convertir_docs.py
+
+Script para convertir fácil y rápidamente los antiguos archivos de texto .doc,
+.dot y .rtf (u otras extensiones de procesadores de texto como .wps,.wpd) al
+formato de Word moderno .docx o a .pdf
