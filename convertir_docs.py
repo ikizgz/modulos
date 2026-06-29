@@ -11,14 +11,16 @@ FUNCIONALIDADES:
  - Conversión recursiva que respeta la estructura de carpetas.
  - Entrada por argumentos o diálogo interactivo (--origen, --destino).
  - Soporta: DEFAULT_EXTS = {".doc", ".dot", ".rtf"} (ampliable con --ext).
- - Conversión a DOCX o PDF mediante --to.
+ - Conversión a DOCX o PDF (mediante --to).
  - Multiproceso opcional (--workers N).
- - Log de progreso (tqdm).
+ - Borrar el archivo original tras una conversión exitosa (--delete-original).
+ - Mantener fecha de modificación original (--keep-time).
  - Reintentos en caso de fallos (MAX_REINTENTOS = 2 intentos por archivo).
  - Saltarse archivos ya convertidos.
- - Mantener fecha de modificación original (--keep-time).
+ - Log de progreso (tqdm).
  - Multiplataforma (Linux, Windows, macOS).
  - Personalizable y extensible.
+
 
 USO BÁSICO:
     python3 convertir_docs.py --origen /carpeta/origen --destino /carpeta/salida
