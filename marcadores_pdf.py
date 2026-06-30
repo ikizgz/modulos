@@ -3,11 +3,16 @@
 
 """
 Script para crear marcadores en los archivos pdf de la normativa
-contenidos en la carpeta que se le pase como 'directorio_base' en '__main__'
+contenidos en la carpeta que se le pase por argumento, input o defecto
 y sus subcarpetas. Crea un índice con los que ya tienen marcadores y los
 nuevos tratados.
+
+Uso:
+python3 marcadores_pdf.py --directorio ./sin_marcar
+o llamarlo sin argumento y te pedirá el directorio a tratar por consola
 """
 
+import argparse
 import csv
 import logging
 import os
@@ -131,7 +136,6 @@ def descubrir_titulos_visuales(texto_visual_ordenado: str) -> List[str]:
                 continue
 
             # Filtro B: Saltamos si la línea es EXCLUSIVAMENTE la fecha del boletín
-            # (Corregido para que no borre títulos reales que contengan un año como "DE 2011")
             if re.search(r"\b\d{1,2}\s+DE\s+[A-Z]+\s+DE\s+20\d\d\b", linea_upper):
                 if fragmentos_titulo:
                     break
@@ -372,7 +376,10 @@ def recorrer_y_procesar(directorio_raiz: str):
 
     # Una vez terminados todos los directorios, generamos el CSV único en la raíz
     if historico_global:
-        ruta_indice_unico = os.path.join(directorio_raiz, "Indice_Global_Normativa.csv")
+        # Obtenemos la carpeta donde está guardado este script
+        carpeta_del_script = os.path.dirname(os.path.abspath(__file__))       
+        # Forzamos que el índice se guarde SIEMPRE en esa carpeta
+        ruta_indice_unico = os.path.join(carpeta_del_script, "Indice_Global_Normativa.csv")
 
         # Comprobamos si el archivo ya existe para saber si debemos escribir cabecera
         archivo_existe = os.path.isfile(ruta_indice_unico)
@@ -397,11 +404,38 @@ def recorrer_y_procesar(directorio_raiz: str):
 
 
 if __name__ == "__main__":
-    # Cambia esto por tu directorio de archivos original
-    directorio_base = "./"
+    # Configuramos argparse para leer argumentos desde la línea de comandos
+    parser = argparse.ArgumentParser(
+        description="Genera marcadores en PDFs y extrae un índice unificado."
+    )
+    parser.add_argument(
+        "-d",
+        "--directorio",
+        type=str,
+        help="Ruta al directorio a procesar (relativa o absoluta). Si no se indica, preguntará interactivamente.",
+    )
 
-    if os.path.exists(directorio_base):
+    args = parser.parse_args()
+    directorio_base = args.directorio
+
+    # Si no se ha pasado por comando, lo preguntamos por consola
+    if not directorio_base:
+        directorio_base = input(
+            "Introduce la ruta de la carpeta a procesar (deja en blanco para usar la carpeta actual './'): "
+        ).strip()
+
+        # Si el usuario solo presiona Enter, asignamos "./"
+        if not directorio_base:
+            directorio_base = "./"
+
+    # Convertimos a ruta absoluta (opcional, pero hace que los logs sean más claros)
+    directorio_base = os.path.abspath(directorio_base)
+
+    if os.path.exists(directorio_base) and os.path.isdir(directorio_base):
+        logging.info(f"Iniciando procesado en el directorio: {directorio_base}")
         recorrer_y_procesar(directorio_base)
         logging.info("\n¡PROCESO FINALIZADO CON ÉXITO!")
     else:
-        logging.error(f"El directorio {directorio_base} no existe.")
+        logging.error(
+            f"El directorio especificado no existe o no es válido: {directorio_base}"
+        )
