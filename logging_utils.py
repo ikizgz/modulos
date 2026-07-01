@@ -55,12 +55,17 @@ from datetime import datetime
 from pathlib import Path
 
 
-def setup_logging(app_name: str = "app", target_dir: str | Path | None = None):
+def setup_logging(
+    app_name: str = "app",
+    target_dir: str | Path | None = None,
+    level: int = logging.INFO,
+):
     """
     Configura logging en consola + archivo logs/<app_name>_YYYYMMDD_HHMMSS.log
 
     app_name: nombre base del archivo de log (ej. "actualizar_bd", "preprocesador")
     target_dir: ruta base opcional donde se guardará la carpeta 'logs'. Si es None, se usa './logs'
+    level: nivel de detalle del log
     """
 
     # Determinar el directorio de destino de forma dinámica y segura
@@ -78,7 +83,8 @@ def setup_logging(app_name: str = "app", target_dir: str | Path | None = None):
 
     # Root logger
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    # Usamos el nivel pasado por parámetro
+    logger.setLevel(level)
 
     # Muy importante: limpiar handlers previos
     if logger.hasHandlers():

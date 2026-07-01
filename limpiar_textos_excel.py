@@ -41,6 +41,11 @@ OPCIONES CLI
                    Desactiva la normalización de espacios (por defecto se colapsan múltiples
                    espacios y NBSP a un único espacio y se recortan extremos).
 
+--log-level"
+                   Nivel de detalle del log (por defecto: INFO)
+                   choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+                   nivel DEBUG para ver todos los detalles de la limpieza
+
 EJEMPLOS
 --------
 1) Preguntar por dry-run, limpiar todo excepto "ID" y "Fecha":
@@ -70,6 +75,7 @@ junto con este programa. Si no, visita <https://www.gnu.org/licenses/>.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import re
 import shutil
@@ -82,6 +88,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.worksheet.worksheet import Worksheet
+
+from logging_utils import setup_logging
 
 # ------------------- CONSTANTES POR DEFECTO -------------------
 DEFAULT_INPUT_FILE = "excel.xlsx"
@@ -213,7 +221,7 @@ def process_sheet(
 
     header_row = find_header_row(ws, HEADER_SCAN_ROWS)
     if header_row is None:
-        print(
+        logging.warning(
             f"  ⚠️  [{sheet_index}] '{ws.title}': no se encontró fila de cabecera (1..{HEADER_SCAN_ROWS}). Omitida."
         )
         return report
@@ -223,7 +231,7 @@ def process_sheet(
     report.columns_processed = list(columns_to_process.values())
 
     if not columns_to_process:
-        print(
+        logging.warning(
             f"  ⚠️  [{sheet_index}] '{ws.title}': no quedan columnas para procesar tras aplicar exclusiones. Omitida."
         )
         return report
@@ -306,6 +314,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="No colapsar espacios múltiples (por defecto se colapsan)",
     )
+    # Añadimos el selector de nivel de log
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="INFO",
+        help="Nivel de detalle del log (por defecto: INFO)",
+    )
     return parser.parse_args(argv)
 
 
@@ -327,6 +342,14 @@ def ask_dry_run() -> bool:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
 
+    # 1. Inicialización del logging (se llama una sola vez)
+    # Convertir el string de argparse al nivel de logging real
+    # logging.getLevelName('DEBUG') devuelve el entero correspondiente
+    log_level = getattr(logging, args.log_level.upper())
+
+    # Inicialización del logging pasando el nivel dinámico
+    setup_logging(app_name="limpiador_excel", level=log_level)
+
     global COLLAPSE_SPACES, HEADER_SCAN_ROWS
     COLLAPSE_SPACES = not args.no_collapse_spaces
     HEADER_SCAN_ROWS = args.header_scan_rows
@@ -343,33 +366,34 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         dry_run = ask_dry_run()
 
-    print("────────────────────────────────────────────────────────────────")
-    print(" Limpieza dinámica de texto en Excel (in‑place, preserva pivots)")
-    print("────────────────────────────────────────────────────────────────")
-    print(f"Archivo de entrada  : {input_file}")
-    print(f"Archivo de salida   : {output_file}")
-    print(f"Dry-run (simulación): {dry_run}")
-    print(f"Colapsar espacios   : {COLLAPSE_SPACES}")
-    print(f"Hojas a procesar    : {sheets_to_process} primeras")
+    # Mensajes iniciales informativos
+    logging.info("────────────────────────────────────────────────────────────────")
+    logging.info(" Limpieza dinámica de texto en Excel (in‑place, preserva pivots)")
+    logging.info("────────────────────────────────────────────────────────────────")
+    logging.info(f"Archivo de entrada  : {input_file}")
+    logging.info(f"Archivo de salida   : {output_file}")
+    logging.info(f"Dry-run (simulación): {dry_run}")
+    logging.info(f"Colapsar espacios   : {COLLAPSE_SPACES}")
+    logging.info(f"Hojas a procesar    : {sheets_to_process} primeras")
+
     if exclude_headers:
-        print(f"Columnas excluidas  : {', '.join(exclude_headers)}")
+        logging.info(f"Columnas excluidas  : {', '.join(exclude_headers)}")
     else:
-        print("Columnas excluidas  : Ninguna (se procesará todo)")
-    print("────────────────────────────────────────────────────────────────")
+        logging.info("Columnas excluidas  : Ninguna (se procesará todo)")
 
     if not os.path.exists(input_file):
-        print(f"❌ No se encuentra el archivo de entrada: {input_file}")
+        logging.error(f"No se encuentra el archivo de entrada: {input_file}")
         return 1
 
     if not dry_run:
         backup_path = backup_file(input_file)
-        print(f"🛡  Backup creado    : {backup_path}")
+        logging.info(f"🛡  Backup creado    : {backup_path}")
 
     wb = load_workbook(input_file)
     sheetnames: List[str] = list(wb.sheetnames)
 
     if sheets_to_process <= 0:
-        print("⚠️  Número de hojas a procesar es 0. Nada que hacer.")
+        logging.error("Número de hojas a procesar es 0. Nada que hacer.")
         return 0
 
     to_process = sheetnames[: min(sheets_to_process, len(sheetnames))]
@@ -377,7 +401,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     for idx, sname in enumerate(to_process, start=1):
         ws: Worksheet = wb[sname]
-        print(f"\n→ Procesando [{idx}] hoja '{sname}' ...")
+        logging.info(f"\n→ Procesando [{idx}] hoja '{sname}' ...")
+
         rep = process_sheet(
             ws,
             idx,
@@ -390,33 +415,38 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if rep.header_row is None:
             continue
 
-        print(f"   Cabecera en fila  : {rep.header_row}")
-        print(f"   Columnas activas  : {len(rep.columns_processed)} detectadas")
-        print(f"   Filas con cambios : {rep.rows_with_changes}")
-        print(f"   Celdas cambiadas  : {rep.total_cells_changed}")
+        # Reporte de resultados por hoja
+        logging.info(f"   Cabecera en fila  : {rep.header_row}")
+        logging.info(f"   Columnas activas  : {len(rep.columns_processed)} detectadas")
+        logging.info(f"   Filas con cambios : {rep.rows_with_changes}")
+        logging.info(f"   Celdas cambiadas  : {rep.total_cells_changed}")
 
+        # Reporte de cambios por filas. Solo irá al log si hay muestras y si el nivel de log es DEBUG
         if rep.samples:
-            print("   Muestras de cambios:")
+            logging.debug("   Muestras de cambios:")
             for col_label, row, before, after in rep.samples[: args.samples]:
-                print(f"     - Fila {row:>5}  [{col_label}]  '{before}'  →  '{after}'")
+                # Esto solo se verá si cambias el nivel de log a DEBUG
+                logging.debug(
+                    f"     - Fila {row:>5}  [{col_label}]  '{before}'  →  '{after}'"
+                )
 
     if not dry_run:
         wb.save(output_file)
-        print("\n✅ Archivo guardado:", output_file)
-        print(
+        logging.info(f"\n✅ Archivo guardado: {output_file}")
+        logging.info(
             "ℹ️  Las hojas restantes (p. ej. con tablas dinámicas) NO se han modificado."
         )
 
     # Resumen global
     total_cells = sum(r.total_cells_changed for r in reports)
     total_rows = sum(r.rows_with_changes for r in reports)
-    print("\n────────────────────────────────────────────────────────────────")
-    print(" RESUMEN GLOBAL")
-    print("────────────────────────────────────────────────────────────────")
-    print(f" Hojas procesadas        : {len(to_process)}")
-    print(f" Filas con cambios       : {total_rows}")
-    print(f" Total celdas cambiadas  : {total_cells}")
-    print("────────────────────────────────────────────────────────────────")
+    logging.info("\n────────────────────────────────────────────────────────────────")
+    logging.info(" RESUMEN GLOBAL")
+    logging.info("────────────────────────────────────────────────────────────────")
+    logging.info(f" Hojas procesadas        : {len(to_process)}")
+    logging.info(f" Filas con cambios       : {total_rows}")
+    logging.info(f" Total celdas cambiadas  : {total_cells}")
+    logging.info("────────────────────────────────────────────────────────────────")
 
     return 0
 
