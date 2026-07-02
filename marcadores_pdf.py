@@ -18,17 +18,23 @@ import logging
 import os
 import re
 import unicodedata
+from datetime import datetime
 from typing import Dict, List, cast
 
 import fitz  # PyMuPDF
 
 # --- Configuración del Log ---
 # Esto escribirá en un archivo y mostrará en consola simultáneamente
+# Archivo nuevo para cada ejecución
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+app_name = os.path.splitext(os.path.basename(__file__))[0]
+log_path = f"{app_name}_{timestamp}.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("procesamiento.log", encoding="utf-8"),
+        logging.FileHandler(log_path, encoding="utf-8"),
         logging.StreamHandler(),
     ],
 )
@@ -377,9 +383,11 @@ def recorrer_y_procesar(directorio_raiz: str):
     # Una vez terminados todos los directorios, generamos el CSV único en la raíz
     if historico_global:
         # Obtenemos la carpeta donde está guardado este script
-        carpeta_del_script = os.path.dirname(os.path.abspath(__file__))       
+        carpeta_del_script = os.path.dirname(os.path.abspath(__file__))
         # Forzamos que el índice se guarde SIEMPRE en esa carpeta
-        ruta_indice_unico = os.path.join(carpeta_del_script, "Indice_Global_Normativa.csv")
+        ruta_indice_unico = os.path.join(
+            carpeta_del_script, "Indice_Global_Normativa.csv"
+        )
 
         # Comprobamos si el archivo ya existe para saber si debemos escribir cabecera
         archivo_existe = os.path.isfile(ruta_indice_unico)
