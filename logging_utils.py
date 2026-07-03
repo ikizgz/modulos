@@ -14,13 +14,9 @@ Configuración rápida:
 1. Asegúrate de que este archivo (`logging_utils.py`) esté en el mismo directorio
    que tu script principal o en el PYTHONPATH.
 2. Importa la función `setup_logging`.
-3. Establece el nivel de logging en # Root logger -> logger.setLevel(logging.??)
-    Por defecto, esto módulo tiene predefinidos 5 niveles (??) para los logs, ordenados de menor a mayor criticidad:
-    DEBUG
-    INFO
-    WARNING
-    ERROR
-    CRITICAL
+3. Establece el nivel de logging en {level} (INFO por defecto): setup_logging({app_name},{target_dir},{level})
+    Por defecto, este módulo tiene predefinidos 5 niveles para los logs, ordenados de menor a mayor criticidad:
+    DEBUG, INFO, WARNING, ERROR, CRITICAL
     Una vez establecido un determinado nivel, solo se muestran logs de esa criticidad o superior.
 
 Ejemplo de uso:
@@ -29,7 +25,7 @@ Ejemplo de uso:
     import logging
 
     # 1. Inicializar al principio del script principal
-    setup_logging(app_name="mi_proceso_pdf", target_dir="ruta/a/mi/carpeta")
+    setup_logging(app_name="mi_proceso_pdf", target_dir="ruta/a/mi/carpeta", level="DEBUG")
 
     # 2. Usar los comandos estándar de logging
     logging.info("Iniciando el procesamiento de documentos...")
