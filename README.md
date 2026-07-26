@@ -51,3 +51,9 @@ Módulo para implementar facilmente logs en los scripts.
 Script para convertir fácil y rápidamente los antiguos archivos de texto .doc,
 .dot y .rtf (u otras extensiones de procesadores de texto como .wps,.wpd) al
 formato de Word moderno .docx o a .pdf
+
+## generate_requirements.py
+
+Script para escanear los scripts *.py de un proyecto y generar un archivo requirements.txt.
+El archivo incluirá opciones CLI para especificar la carpeta a escanear, la ruta de salida
+y una opción para mapear nombres de módulos a paquetes PyPI comunes.
