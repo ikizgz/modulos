@@ -1,4 +1,3 @@
-com
 PyMuPDF
 importlib_metadata
 openpyxl
