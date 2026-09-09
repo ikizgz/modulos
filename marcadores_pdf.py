@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Script para crear marcadores en los archivos pdf de la normativa
@@ -19,7 +18,7 @@ import os
 import re
 import unicodedata
 from datetime import datetime
-from typing import Dict, List, cast
+from typing import cast
 
 import fitz  # PyMuPDF
 
@@ -79,7 +78,7 @@ def limpiar_linea_titulo(linea: str) -> str:
     return limpia.strip()
 
 
-def descubrir_titulos_visuales(texto_visual_ordenado: str) -> List[str]:
+def descubrir_titulos_visuales(texto_visual_ordenado: str) -> list[str]:
     """
     Escanea el texto visual ordenado. Encuentra TODOS los emisores de una página,
     busca hacia arriba y une líneas contiguas. Se detiene ante saltos de párrafo.
@@ -224,7 +223,7 @@ def obtener_texto_visual(
     return "\n".join(lineas_visuales)
 
 
-def extraer_toc_existente(ruta_archivo: str) -> List[Dict]:
+def extraer_toc_existente(ruta_archivo: str) -> list[dict]:
     """Lee el TOC de un PDF y lo devuelve en formato lista de diccionarios."""
     nombre_fichero = os.path.basename(ruta_archivo)
     registros = []
@@ -247,13 +246,13 @@ def extraer_toc_existente(ruta_archivo: str) -> List[Dict]:
                     }
                 )
         doc.close()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logging.error(f"Error leyendo TOC de {nombre_fichero}: {e}")
 
     return registros
 
 
-def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> List[Dict]:
+def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> list[dict]:
     """
     Procesa cada archivo que se lee, detecta los títulos de los artículos, genera marcadores y guarda el PDF marcado.
     Devuelve una lista de diccionarios con los registros de títulos encontrados para crear índices posteriormente
@@ -270,8 +269,8 @@ def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> List[D
 
     logging.info(f"Procesando: {nombre_fichero}")
 
-    registros_archivo: List[Dict] = []
-    lista_marcadores_final: List[List] = []
+    registros_archivo: list[dict] = []
+    lista_marcadores_final: list[list] = []
 
     try:
         documento_pdf = fitz.open(ruta_archivo)
@@ -328,7 +327,7 @@ def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> List[D
             logging.warning(f"  -> AVISO: No se detectaron bloques en {nombre_fichero}")
 
         documento_pdf.close()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logging.error(f"  -> CRÍTICO: No se pudo procesar {nombre_fichero}: {e}")
 
     return registros_archivo
@@ -373,7 +372,7 @@ def recorrer_y_procesar(directorio_raiz: str):
                     datos = procesar_archivo_ibercaja(ruta_completa, carpeta_salida)
                     historico_global.extend(datos)
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 # Si un archivo falla, lo anotamos pero el bucle NO se detiene
                 logging.error(
                     f"FALLO CRÍTICO en el archivo {archivo}: {e}. Continuando con el siguiente..."

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 convertir_docs.py
@@ -126,8 +125,8 @@ def convertir_archivo(src, source_root, target_root, soffice, keep_time, filtro)
                         ts = os.path.getmtime(src)
                         os.utime(outfile, (ts, ts))
                     return (src, "ok", f"Convertido en intento {intento}")
-                except Exception as e:
-                    return (src, "fail", f"Error al mover al destino: {str(e)}")
+                except Exception as e:  # noqa: BLE001
+                    return (src, "fail", f"Error al mover al destino: {e!s}")
 
         return (
             src,
@@ -144,9 +143,8 @@ def listar_archivos(origen, extensiones):
     for root, _, files in os.walk(origen):
         for f in files:
             suf = Path(f).suffix.lower()
-            if suf in extensiones:
-                if not f.lower().endswith(".docx"):
-                    lista.append(os.path.join(root, f))
+            if suf in extensiones and not f.lower().endswith(".docx"):
+                lista.append(os.path.join(root, f))
     return lista
 
 
@@ -272,9 +270,7 @@ def main():
     # Volcar todos los resultados de la conversión al archivo de registro
     for src_path, estado, detalle in resultados:
         msg = f"Archivo: {src_path} | Estado: [{estado.upper()}] | Detalle: {detalle}"
-        if estado == "ok":
-            logging.info(msg)
-        elif estado == "skip":
+        if estado == "ok" or estado == "skip":
             logging.info(msg)
         else:
             logging.error(msg)

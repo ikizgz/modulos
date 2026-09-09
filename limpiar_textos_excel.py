@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Limpia en un Excel TODAS las columnas de texto en las N primeras hojas (por defecto 1)
@@ -80,10 +79,10 @@ import os
 import re
 import shutil
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional, Sequence, Tuple
 
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
@@ -100,7 +99,7 @@ NUM_SHEETS_TO_PROCESS = 1
 HEADER_SCAN_ROWS = 5
 COLLAPSE_SPACES = True
 SHOW_SAMPLES_PER_SHEET = 5
-DEFAULT_EXCLUDES: List[str] = []  # Columnas a excluir por defecto si se desea
+DEFAULT_EXCLUDES: list[str] = []  # Columnas a excluir por defecto si se desea
 # --------------------------------------------------------------
 
 
@@ -108,11 +107,11 @@ DEFAULT_EXCLUDES: List[str] = []  # Columnas a excluir por defecto si se desea
 @dataclass
 class SheetReport:
     sheet_name: str
-    header_row: Optional[int] = None
-    columns_processed: List[str] = field(default_factory=list)
+    header_row: int | None = None
+    columns_processed: list[str] = field(default_factory=list)
     rows_with_changes: int = 0
     total_cells_changed: int = 0
-    samples: List[Tuple[str, int, str, str]] = field(default_factory=list)
+    samples: list[tuple[str, int, str, str]] = field(default_factory=list)
 
 
 # --------------------------------------------------------------
@@ -128,7 +127,7 @@ def _to_text(value: object | None) -> str | None:
         return str(value)
     try:
         return str(value)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -160,7 +159,7 @@ def limpiar_texto(texto_in: object | None) -> str | None:
 
 
 # ------------------ LOCALIZACIÓN DE CABECERAS -----------------
-def find_header_row(ws: Worksheet, scan_rows: int) -> Optional[int]:
+def find_header_row(ws: Worksheet, scan_rows: int) -> int | None:
     """Devuelve la fila (1-based) que parece contener la cabecera.
     Considera que es una cabecera si la fila tiene celdas con texto."""
     max_scan = min(ws.max_row, scan_rows)
@@ -175,11 +174,11 @@ def find_header_row(ws: Worksheet, scan_rows: int) -> Optional[int]:
 
 def get_active_columns(
     ws: Worksheet, header_row: int, exclude_headers: Sequence[str]
-) -> Dict[int, str]:
+) -> dict[int, str]:
     """Mapea el índice de la columna (1-based) con su nombre de cabecera,
     excluyendo las solicitadas por el usuario."""
     exclude_lower = {h.strip().lower() for h in exclude_headers}
-    columns_map: Dict[int, str] = {}
+    columns_map: dict[int, str] = {}
 
     for cell in ws[header_row]:
         raw = cell.value
@@ -269,7 +268,7 @@ def process_sheet(
 
 
 # ------------------------- CLI / MAIN -------------------------
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Limpia todas las columnas de texto en las N primeras hojas de un Excel (in-place) excepto las excluidas."
     )
@@ -339,7 +338,7 @@ def ask_dry_run() -> bool:
         print("Respuesta no válida. Escribe 's' o 'n'.")
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
 
     # 1. Inicialización del logging (se llama una sola vez)
@@ -357,7 +356,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     input_file: str = args.input
     output_file: str = args.output
     sheets_to_process: int = max(0, args.sheets)
-    exclude_headers: List[str] = args.exclude
+    exclude_headers: list[str] = args.exclude
 
     if args.dry_run == "on":
         dry_run = True
@@ -390,14 +389,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         logging.info(f"🛡  Backup creado    : {backup_path}")
 
     wb = load_workbook(input_file)
-    sheetnames: List[str] = list(wb.sheetnames)
+    sheetnames: list[str] = list(wb.sheetnames)
 
     if sheets_to_process <= 0:
         logging.error("Número de hojas a procesar es 0. Nada que hacer.")
         return 0
 
     to_process = sheetnames[: min(sheets_to_process, len(sheetnames))]
-    reports: List[SheetReport] = []
+    reports: list[SheetReport] = []
 
     for idx, sname in enumerate(to_process, start=1):
         ws: Worksheet = wb[sname]
