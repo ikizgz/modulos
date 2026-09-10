@@ -15,56 +15,33 @@ Requisitos previos:
     - Librerías instaladas: pip install google-genai pandas pymupdf openpyxl
     - Clave de API configurada (en el script o como variable de entorno).
 
-Ejemplo de uso desde la terminal de PowerShell:
-    python extraer_escalafon_masivo.py --input "mi_escalafon.pdf" --output "resultado_final.xlsx"
+Ejemplo de uso desde la terminal:
+    python3 extraer_tablas_pdf.py --input "mi_escalafon.pdf" --output "resultado_final.xlsx"
     (Si omites el parámetro --output, se llamará automáticamente como el PDF original).
 
-    python extraer_escalafon_masivo.py --input "mi_escalafon.pdf" --max-paginas 5
+    python3 extraer_tablas_pdf.py --input "mi_escalafon.pdf" --max-paginas 5
     (Procesará únicamente las primeras 5 páginas, útil para pruebas rápidas).
 ===============================================================================
 """
+
+from __future__ import annotations
 
 import argparse
 import io
 import logging
 import os
-import sys
+from collections.abc import Sequence
 
 import fitz  # PyMuPDF
 import pandas as pd
 from google import genai
 from google.genai import types
 
-# ===============================================================================
-# CONFIGURACIÓN DEL SISTEMA DE LOGGING (Consola + Archivo de Log)
-# ===============================================================================
-LOG_FILENAME = "extraer_tablas_pdf.log"
+# Importación del módulo auxiliar centralizado
+from logging_utils import setup_logging
 
-# Configurar el logger principal
-logger = logging.getLogger("ExtractorEscalafon")
-logger.setLevel(logging.INFO)
-
-# Evitar duplicidad de manejadores si se ejecuta varias veces en el mismo entorno
-if not logger.handlers:
-    # 1. Manejador para la consola (terminal)
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    console_format = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
-    )
-    console_handler.setFormatter(console_format)
-
-    # 2. Manejador para el archivo de log (con codificación UTF-8 para tildes y símbolos)
-    file_handler = logging.FileHandler(LOG_FILENAME, encoding="utf-8")
-    file_handler.setLevel(logging.INFO)
-    file_format = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    file_handler.setFormatter(file_format)
-
-    # Añadir ambos manejadores al logger
-    logger.addHandler(console_handler)
-    logger.addHandler(file_handler)
+# Logger instanciado a nivel de módulo
+logger = logging.getLogger(__name__)
 
 
 def procesar_pdf_a_excel(
@@ -72,7 +49,7 @@ def procesar_pdf_a_excel(
     excel_output: str,
     api_key: str | None = None,
     max_paginas: int | None = None,
-):
+) -> None:
     """Función principal que gestiona la conversión de páginas y llamadas a la IA."""
 
     if not os.path.exists(pdf_path):
@@ -124,7 +101,7 @@ def procesar_pdf_a_excel(
             prompt = """
             Analiza esta imagen escaneada de un documento de tabla de datos/escalafón. 
             Extrae toda la información de la tabla con absoluta precisión.
-            Devuelve el resultado estrictamente en formato CSV (delimitado por comas), 
+            Devuelve el resultado strictly en formato CSV (delimitado por comas), 
             donde la primera línea sean los encabezados de las columnas y las siguientes los registros. 
             No incluyas saludos, explicaciones, bloques de código markdown extra ni texto adicional, 
             únicamente el contenido tabular CSV limpio.
@@ -145,9 +122,8 @@ def procesar_pdf_a_excel(
                     ),
                 ],
             )
-            csv_data = response.text
 
-            # Asegurar que response.text no sea None para satisfacer al linter
+            # Asegurar que response.text no sea None
             csv_data = response.text if response.text else ""
 
             # Limpiar posibles bloques de código markdown que a veces envuelve la IA (ej. ```csv ... ```)
@@ -190,9 +166,6 @@ def procesar_pdf_a_excel(
             logger.info(
                 f"¡Proceso completado con éxito! Archivo Excel guardado en: '{excel_output}'"
             )
-            logger.info(
-                f"Se han registrado los detalles completos de la ejecución en el archivo: '{LOG_FILENAME}'"
-            )
         except Exception as e:  # noqa: BLE001
             logger.error(f"Error al intentar guardar el archivo Excel final: {e}")
     else:
@@ -201,25 +174,16 @@ def procesar_pdf_a_excel(
         )
 
 
-if __name__ == "__main__":
-    # Configuración de los parámetros de entrada por línea de comandos (CLI)
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Script automatizado para extraer tablas de PDFs escaneados masivos utilizando Google Gemini y exportarlas a Excel."
     )
-
-if __name__ == "__main__":
-    # Configuración de los parámetros de entrada por línea de comandos (CLI)
-    parser = argparse.ArgumentParser(
-        description="Script automatizado para extraer tablas de PDFs escaneados masivos utilizando Google Gemini y exportarlas a Excel."
-    )
-
     parser.add_argument(
         "--input",
         "-i",
         required=True,
         help="Ruta del archivo PDF escaneado que deseas procesar (ej: --input documento.pdf)",
     )
-
     parser.add_argument(
         "--max-paginas",
         "-m",
@@ -227,31 +191,46 @@ if __name__ == "__main__":
         required=False,
         help="Número máximo de páginas a procesar (opcional, útil para pruebas).",
     )
-
     parser.add_argument(
         "--output",
         "-o",
         required=False,
         help="Ruta o nombre del archivo Excel de salida (opcional). Por defecto usará el mismo nombre del PDF.",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="INFO",
+        help="Nivel de detalle del log (por defecto: INFO)",
+    )
+    return parser.parse_args(argv)
 
-    args = parser.parse_args()
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    # Configuración centralizada de logging
+    log_level = getattr(logging, args.log_level.upper())
+    setup_logging(app_name="extraer_tablas_pdf", level=log_level)
 
     # Determinar dinámicamente el nombre de salida si no se proporciona explícitamente
     if args.output:
         output_file = args.output
     else:
-        # Reemplazar la extensión del PDF (ej. .pdf) por .xlsx
         base_name = os.path.splitext(args.input)[0]
         output_file = f"{base_name}.xlsx"
 
-    # Tu clave de API configurada
+    # Clave de API configurada
     MI_API_KEY = "AQ.Ab8RN6IY9HJaAxjIGewqFDEhk2FljyPRkdZLfRYivuRRdUL8CA"
 
-    # Ejecución principal conectando el nuevo argumento max_paginas
     procesar_pdf_a_excel(
         pdf_path=args.input,
         excel_output=output_file,
         api_key=MI_API_KEY,
         max_paginas=args.max_paginas,
     )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

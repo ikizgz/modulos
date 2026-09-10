@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 
 """
 Título: [Nombre del script o módulo]
@@ -28,6 +28,7 @@ COMERCIALIZACIÓN o IDONEIDAD PARA UN PROPÓSITO PARTICULAR.
 Deberías haber recibido una copia de la Licencia Pública General GNU
 junto con este programa. Si no, visita <https://www.gnu.org/licenses/>.
 """
+
 
 def main():
     # Tu código aquí

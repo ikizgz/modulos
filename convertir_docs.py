@@ -112,7 +112,12 @@ def convertir_archivo(src, source_root, target_root, soffice, keep_time, filtro)
         ]
 
         for intento in range(1, MAX_REINTENTOS + 1):
-            res = subprocess.run(cmd, capture_output=True, text=True)
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,  # 👈 Añadido explícitamente para acallar el linter
+            )
 
             # Comprobamos si se generó en el Temp local
             tmp_outfile = Path(tmpdir) / (Path(src).stem + f".{ext_dest}")
@@ -233,6 +238,8 @@ def main():
 
     # ¡Ahora pasamos la carpeta destino directamente aquí habiendo asegurado que es correcta!
     setup_logging(app_name="convertir_docs", target_dir=destino)
+    # Instanciar el propio logger
+    logger = logging.getLogger(__name__)
 
     extensiones = set(DEFAULT_EXTS)
     if args.ext:
@@ -240,9 +247,9 @@ def main():
 
     filtro = filtro_para(args.to)
 
-    logging.info("🔍 Escaneando archivos de origen...")
+    logger.info("🔍 Escaneando archivos de origen...")
     archivos = listar_archivos(origen, extensiones)
-    logging.info(f"Se encontraron {len(archivos)} archivos aptos para procesar.")
+    logger.info(f"Se encontraron {len(archivos)} archivos aptos para procesar.")
 
     f_convertir = partial(
         convertir_archivo,
@@ -256,29 +263,29 @@ def main():
     resultados = []
 
     if args.workers > 1:
-        logging.info(f"⚡ Iniciando multiproceso con {args.workers} workers...")
+        logger.info(f"⚡ Iniciando multiproceso con {args.workers} workers...")
         with multiprocessing.Pool(args.workers) as pool:
-            for r in tqdm(
-                pool.imap_unordered(f_convertir, archivos), total=len(archivos)
-            ):
-                resultados.append(r)
+            # list() consume todo el generador de imap_unordered directamente
+            resultados = list(
+                tqdm(pool.imap_unordered(f_convertir, archivos), total=len(archivos))
+            )
     else:
-        logging.info("Modo secuencial activo…")
-        for src in tqdm(archivos):
-            resultados.append(f_convertir(src))
+        logger.info("Modo secuencial activo…")
+        # Comprensión de listas: más rápida y limpia que el bucle for + append
+        resultados = [f_convertir(src) for src in tqdm(archivos)]
 
     # Volcar todos los resultados de la conversión al archivo de registro
     for src_path, estado, detalle in resultados:
         msg = f"Archivo: {src_path} | Estado: [{estado.upper()}] | Detalle: {detalle}"
-        if estado == "ok" or estado == "skip":
-            logging.info(msg)
+        if estado in ("ok", "skip"):
+            logger.info(msg)
         else:
-            logging.error(msg)
+            logger.error(msg)
 
     # Post-procesado seguro: Borrado de archivos originales si se activa la flag
     deleted_count = 0
     if args.delete_original:
-        logging.info(
+        logger.info(
             "🗑️  Iniciando proceso de limpieza de archivos originales convertidos..."
         )
         for src_path, estado, _ in resultados:
@@ -286,11 +293,10 @@ def main():
                 try:
                     os.remove(src_path)
                     deleted_count += 1
-                    logging.info(f"Eliminado original correctamente: {src_path}")
-                except Exception as e:
-                    logging.error(
-                        f"❌ Error crítico al intentar eliminar {src_path}. Detalle del sistema: {e}",
-                        exc_info=True,
+                    logger.info(f"Eliminado original correctamente: {src_path}")
+                except Exception as e:  # noqa: BLE001
+                    logger.error(
+                        f"❌ Error crítico al intentar eliminar {src_path}. Detalle del sistema: {e}"
                     )
 
     oks = sum(1 for r in resultados if r[1] == "ok")
@@ -298,17 +304,17 @@ def main():
     skips = sum(1 for r in resultados if r[1] == "skip")
 
     # Resumen final
-    logging.info("===== RESUMEN DE EJECUCIÓN =====")
-    logging.info(f"✔ Correctos : {oks}")
+    logger.info("===== RESUMEN DE EJECUCIÓN =====")
+    logger.info(f"✔ Correctos : {oks}")
     if args.delete_original:
-        logging.info(f"🗑  Borrados  : {deleted_count}")
+        logger.info(f"🗑  Borrados  : {deleted_count}")
         if deleted_count < oks:
-            logging.warning(
+            logger.warning(
                 f"⚠️  Atención: {oks - deleted_count} archivos 'ok' no pudieron ser eliminados. Revisa los errores previos."
             )
-    logging.info(f"↷ Saltados  : {skips}")
-    logging.info(f"❌ Fallidos  : {fails}")
-    logging.info("¡Proceso finalizado! 🎉")
+    logger.info(f"↷ Saltados  : {skips}")
+    logger.info(f"❌ Fallidos  : {fails}")
+    logger.info("¡Proceso finalizado! 🎉")
 
 
 if __name__ == "__main__":

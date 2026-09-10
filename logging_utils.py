@@ -25,18 +25,19 @@ Ejemplo de uso:
     import logging
 
     # 1. Inicializar al principio del script principal
-    setup_logging(app_name="mi_proceso_pdf", target_dir="ruta/a/mi/carpeta", level="DEBUG")
+    setup_logging(app_name="mi_proceso_pdf", target_dir="ruta/a/mi/carpeta", level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
 
     # 2. Usar los comandos estándar de logging
-    logging.info("Iniciando el procesamiento de documentos...")
-    logging.warning("El archivo X no tiene el formato esperado.")
+    logger.info("Iniciando el procesamiento de documentos...")
+    logger.warning("El archivo X no tiene el formato esperado.")
     try:
         # Tu código aquí
         pass
     except Exception as e:
-        logging.exception(f"Error crítico: {e}")
+        logger.exception(f"Error crítico: {e}")
     # si necesitas todo el traceback en el log como hace exception pero fuera de uno:
-    logging.error("Error crítico", exc_info=True)
+    logger.error("Error crítico", exc_info=True)
 
 Estructura de archivos generada:
 --------------------------------
@@ -47,8 +48,11 @@ El módulo creará automáticamente una carpeta `logs/` y archivos con el format
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+# Logger propio del módulo
+logger = logging.getLogger(__name__)
 
 
 def setup_logging(
@@ -73,18 +77,17 @@ def setup_logging(
     # Crear directorio logs si no existe
     os.makedirs(log_dir, exist_ok=True)
 
-    # Archivo nuevo para cada ejecución
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Archivo nuevo para cada ejecución con hora local respetando la zona horaria
+    timestamp = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     log_path = log_dir / f"{app_name}_{timestamp}.log"
 
-    # Root logger
-    logger = logging.getLogger()
-    # Usamos el nivel pasado por parámetro
-    logger.setLevel(level)
+    # Root logger para capturar todo el flujo
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
 
     # Muy importante: limpiar handlers previos
-    if logger.hasHandlers():
-        logger.handlers.clear()
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
 
     # Formatos
     file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -93,11 +96,11 @@ def setup_logging(
     # Handler archivo
     file_handler = logging.FileHandler(str(log_path), encoding="utf-8")
     file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
+    root_logger.addHandler(file_handler)
 
     # Handler consola
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
+    root_logger.addHandler(console_handler)
 
-    logging.info(f"*** Logging configurado. Archivo: {log_path} ***")
+    logger.info(f"*** Logging configurado. Archivo: {log_path} ***")

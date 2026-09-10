@@ -81,14 +81,18 @@ import shutil
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.worksheet.worksheet import Worksheet
 
+# logging_utils.py es un módulo auxiliar para configurar el logging de manera centralizada
 from logging_utils import setup_logging
+
+# 💡 Logger instanciado a nivel de módulo para que todas las funciones lo usen libremente
+logger = logging.getLogger(__name__)
 
 # ------------------- CONSTANTES POR DEFECTO -------------------
 DEFAULT_INPUT_FILE = "excel.xlsx"
@@ -198,7 +202,7 @@ def backup_file(path: str) -> str:
     """Crea una copia de seguridad con timestamp y devuelve su ruta."""
     # Generamos el nombre del archivo con os.path para mantener la extensión original y añadir un sufijo de backup con timestamp
     base, ext = os.path.splitext(path)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
     backup_path = f"{base}_BACKUP_{ts}{ext}"
     shutil.copy2(path, backup_path)
     return backup_path
@@ -220,7 +224,7 @@ def process_sheet(
 
     header_row = find_header_row(ws, HEADER_SCAN_ROWS)
     if header_row is None:
-        logging.warning(
+        logger.warning(
             f"  ⚠️  [{sheet_index}] '{ws.title}': no se encontró fila de cabecera (1..{HEADER_SCAN_ROWS}). Omitida."
         )
         return report
@@ -230,7 +234,7 @@ def process_sheet(
     report.columns_processed = list(columns_to_process.values())
 
     if not columns_to_process:
-        logging.warning(
+        logger.warning(
             f"  ⚠️  [{sheet_index}] '{ws.title}': no quedan columnas para procesar tras aplicar exclusiones. Omitida."
         )
         return report
@@ -366,33 +370,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         dry_run = ask_dry_run()
 
     # Mensajes iniciales informativos
-    logging.info("────────────────────────────────────────────────────────────────")
-    logging.info(" Limpieza dinámica de texto en Excel (in‑place, preserva pivots)")
-    logging.info("────────────────────────────────────────────────────────────────")
-    logging.info(f"Archivo de entrada  : {input_file}")
-    logging.info(f"Archivo de salida   : {output_file}")
-    logging.info(f"Dry-run (simulación): {dry_run}")
-    logging.info(f"Colapsar espacios   : {COLLAPSE_SPACES}")
-    logging.info(f"Hojas a procesar    : {sheets_to_process} primeras")
+    logger.info("────────────────────────────────────────────────────────────────")
+    logger.info(" Limpieza dinámica de texto en Excel (in‑place, preserva pivots)")
+    logger.info("────────────────────────────────────────────────────────────────")
+    logger.info(f"Archivo de entrada  : {input_file}")
+    logger.info(f"Archivo de salida   : {output_file}")
+    logger.info(f"Dry-run (simulación): {dry_run}")
+    logger.info(f"Colapsar espacios   : {COLLAPSE_SPACES}")
+    logger.info(f"Hojas a procesar    : {sheets_to_process} primeras")
 
     if exclude_headers:
-        logging.info(f"Columnas excluidas  : {', '.join(exclude_headers)}")
+        logger.info(f"Columnas excluidas  : {', '.join(exclude_headers)}")
     else:
-        logging.info("Columnas excluidas  : Ninguna (se procesará todo)")
+        logger.info("Columnas excluidas  : Ninguna (se procesará todo)")
 
     if not os.path.exists(input_file):
-        logging.error(f"No se encuentra el archivo de entrada: {input_file}")
+        logger.error(f"No se encuentra el archivo de entrada: {input_file}")
         return 1
 
     if not dry_run:
         backup_path = backup_file(input_file)
-        logging.info(f"🛡  Backup creado    : {backup_path}")
+        logger.info(f"🛡  Backup creado    : {backup_path}")
 
     wb = load_workbook(input_file)
     sheetnames: list[str] = list(wb.sheetnames)
 
     if sheets_to_process <= 0:
-        logging.error("Número de hojas a procesar es 0. Nada que hacer.")
+        logger.error("Número de hojas a procesar es 0. Nada que hacer.")
         return 0
 
     to_process = sheetnames[: min(sheets_to_process, len(sheetnames))]
@@ -400,7 +404,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     for idx, sname in enumerate(to_process, start=1):
         ws: Worksheet = wb[sname]
-        logging.info(f"\n→ Procesando [{idx}] hoja '{sname}' ...")
+        logger.info(f"\n→ Procesando [{idx}] hoja '{sname}' ...")
 
         rep = process_sheet(
             ws,
@@ -415,37 +419,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             continue
 
         # Reporte de resultados por hoja
-        logging.info(f"   Cabecera en fila  : {rep.header_row}")
-        logging.info(f"   Columnas activas  : {len(rep.columns_processed)} detectadas")
-        logging.info(f"   Filas con cambios : {rep.rows_with_changes}")
-        logging.info(f"   Celdas cambiadas  : {rep.total_cells_changed}")
+        logger.info(f"   Cabecera en fila  : {rep.header_row}")
+        logger.info(f"   Columnas activas  : {len(rep.columns_processed)} detectadas")
+        logger.info(f"   Filas con cambios : {rep.rows_with_changes}")
+        logger.info(f"   Celdas cambiadas  : {rep.total_cells_changed}")
 
         # Reporte de cambios por filas. Solo irá al log si hay muestras y si el nivel de log es DEBUG
         if rep.samples:
-            logging.debug("   Muestras de cambios:")
+            logger.debug("   Muestras de cambios:")
             for col_label, row, before, after in rep.samples[: args.samples]:
                 # Esto solo se verá si cambias el nivel de log a DEBUG
-                logging.debug(
+                logger.debug(
                     f"     - Fila {row:>5}  [{col_label}]  '{before}'  →  '{after}'"
                 )
 
     if not dry_run:
         wb.save(output_file)
-        logging.info(f"\n✅ Archivo guardado: {output_file}")
-        logging.info(
+        logger.info(f"\n✅ Archivo guardado: {output_file}")
+        logger.info(
             "ℹ️  Las hojas restantes (p. ej. con tablas dinámicas) NO se han modificado."
         )
 
     # Resumen global
     total_cells = sum(r.total_cells_changed for r in reports)
     total_rows = sum(r.rows_with_changes for r in reports)
-    logging.info("\n────────────────────────────────────────────────────────────────")
-    logging.info(" RESUMEN GLOBAL")
-    logging.info("────────────────────────────────────────────────────────────────")
-    logging.info(f" Hojas procesadas        : {len(to_process)}")
-    logging.info(f" Filas con cambios       : {total_rows}")
-    logging.info(f" Total celdas cambiadas  : {total_cells}")
-    logging.info("────────────────────────────────────────────────────────────────")
+    logger.info("\n────────────────────────────────────────────────────────────────")
+    logger.info(" RESUMEN GLOBAL")
+    logger.info("────────────────────────────────────────────────────────────────")
+    logger.info(f" Hojas procesadas        : {len(to_process)}")
+    logger.info(f" Filas con cambios       : {total_rows}")
+    logger.info(f" Total celdas cambiadas  : {total_cells}")
+    logger.info("────────────────────────────────────────────────────────────────")
 
     return 0
 

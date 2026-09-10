@@ -11,32 +11,24 @@ python3 marcadores_pdf.py --directorio ./sin_marcar
 o llamarlo sin argumento y te pedirá el directorio a tratar por consola
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 import logging
 import os
 import re
 import unicodedata
-from datetime import datetime
+from collections.abc import Sequence
 from typing import cast
 
 import fitz  # PyMuPDF
 
-# --- Configuración del Log ---
-# Esto escribirá en un archivo y mostrará en consola simultáneamente
-# Archivo nuevo para cada ejecución
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-app_name = os.path.splitext(os.path.basename(__file__))[0]
-log_path = f"{app_name}_{timestamp}.log"
+# logging_utils.py es un módulo auxiliar para configurar el logging de manera centralizada
+from logging_utils import setup_logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_path, encoding="utf-8"),
-        logging.StreamHandler(),
-    ],
-)
+# Logger instanciado a nivel de módulo
+logger = logging.getLogger(__name__)
 
 
 def limpiar_titulo_para_indice(texto: str) -> str:
@@ -179,14 +171,14 @@ def obtener_texto_visual(
     texto_raw = cast(str, pagina.get_text("text"))
 
     if len(texto_raw.strip()) < 60:
-        logging.info(
+        logger.info(
             f"   [OCR] Ejecutando Tesseract en pág. {numero_pagina + 1} de '{nombre_fichero}'..."
         )
         try:
             tp = pagina.get_textpage_ocr(flags=fitz.TEXTFLAGS_SEARCH, language="spa")
             bloques = tp.extractBLOCKS()
-        except Exception as e:
-            logging.info(
+        except Exception as e:  # noqa: BLE001
+            logger.info(
                 f"   [ERROR OCR] Falló Tesseract en pág. {numero_pagina + 1}: {e}"
             )
             bloques = pagina.get_text("blocks")
@@ -196,19 +188,17 @@ def obtener_texto_visual(
     bloques_texto = [b for b in bloques if b[6] == 0]
 
     # ORDENACIÓN: Agrupamos alturas en franjas de 5px para alinear columnas, luego por X
-    # Convertimos b[1] explícitamente a float o int
     bloques_texto.sort(key=lambda b: (round(float(b[1]) / 5) * 5, b[0]))
 
     lineas_visuales = []
-    y_bottom_previo = -1
+    y_bottom_previo = -1.0
 
     for b in bloques_texto:
         y0 = b[1]
         y1 = b[3]
 
         # INYECCIÓN DE GAP: Si el bloque actual está a más de 8 píxeles por debajo del final del último bloque visto
-        # Aseguramos que tanto y0 como y_bottom_previo sean tratados como números
-        if y_bottom_previo != -1 and float(y0) > float(y_bottom_previo) + 8:
+        if y_bottom_previo != -1.0 and float(y0) > float(y_bottom_previo) + 8:
             lineas_visuales.append("")  # Separador físico de párrafo
 
         texto_bloque = b[4].strip()
@@ -218,7 +208,7 @@ def obtener_texto_visual(
                 if linea_str:
                     lineas_visuales.append(linea_str)
 
-        y_bottom_previo = y1 if y_bottom_previo == -1 else max(y_bottom_previo, y1)
+        y_bottom_previo = y1 if y_bottom_previo == -1.0 else max(y_bottom_previo, y1)
 
     return "\n".join(lineas_visuales)
 
@@ -236,7 +226,6 @@ def extraer_toc_existente(ruta_archivo: str) -> list[dict]:
             # item es: [nivel, título, página_destino]
             # Solo guardamos los de nivel 1 para mantener la coherencia
             if item[0] == 1:
-                # AQUÍ: Limpiamos el título justo antes de mandarlo al CSV
                 titulo_limpio = limpiar_titulo_para_indice(item[1])
                 registros.append(
                     {
@@ -247,7 +236,7 @@ def extraer_toc_existente(ruta_archivo: str) -> list[dict]:
                 )
         doc.close()
     except Exception as e:  # noqa: BLE001
-        logging.error(f"Error leyendo TOC de {nombre_fichero}: {e}")
+        logger.error(f"Error leyendo TOC de {nombre_fichero}: {e}")
 
     return registros
 
@@ -258,22 +247,20 @@ def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> list[d
     Devuelve una lista de diccionarios con los registros de títulos encontrados para crear índices posteriormente
     """
     nombre_fichero = os.path.basename(ruta_archivo)
-    # 1. Abrimos el documento para inspeccionarlo
-    documento_pdf = fitz.open(ruta_archivo)
-
-    # 2. Comprobación maestra: ¿Ya tiene marcadores (TOC)?
-    if documento_pdf.get_toc():
-        logging.info(f"Saltando: {nombre_fichero} (ya tiene marcadores).")
-        documento_pdf.close()
-        return []
-
-    logging.info(f"Procesando: {nombre_fichero}")
-
-    registros_archivo: list[dict] = []
-    lista_marcadores_final: list[list] = []
 
     try:
         documento_pdf = fitz.open(ruta_archivo)
+
+        # Comprobación maestra: ¿Ya tiene marcadores (TOC)?
+        if documento_pdf.get_toc():
+            logger.info(f"Saltando: {nombre_fichero} (ya tiene marcadores).")
+            documento_pdf.close()
+            return []
+
+        logger.info(f"Procesando: {nombre_fichero}")
+
+        registros_archivo: list[dict] = []
+        lista_marcadores_final: list[list] = []
 
         if len(documento_pdf) < 1:
             documento_pdf.close()
@@ -294,12 +281,9 @@ def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> list[d
             if tiene_bloque_consultas:
                 titulos_pagina = descubrir_titulos_visuales(texto_visual)
                 for titulo in titulos_pagina:
-                    # El PDF lo marcamos con el título original (queda más bonito visualmente)
                     lista_marcadores_final.append([1, titulo, num_pag + 1])
 
-                    # AQUÍ: Pero al CSV mandamos la versión limpia para las búsquedas
                     titulo_limpio = limpiar_titulo_para_indice(titulo)
-
                     registros_archivo.append(
                         {
                             "archivo": nombre_fichero,
@@ -320,25 +304,25 @@ def procesar_archivo_ibercaja(ruta_archivo: str, carpeta_destino: str) -> list[d
             ruta_final = os.path.join(carpeta_destino, f"{nombre_base}_MARCADO.pdf")
 
             documento_pdf.save(ruta_final)
-            logging.info(
+            logger.info(
                 f"  -> ÉXITO: {len(lista_marcadores_final)} marcadores guardados."
             )
         else:
-            logging.warning(f"  -> AVISO: No se detectaron bloques en {nombre_fichero}")
+            logger.warning(f"  -> AVISO: No se detectaron bloques en {nombre_fichero}")
 
         documento_pdf.close()
-    except Exception as e:  # noqa: BLE001
-        logging.error(f"  -> CRÍTICO: No se pudo procesar {nombre_fichero}: {e}")
+        return registros_archivo
 
-    return registros_archivo
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"  -> CRÍTICO: No se pudo procesar {nombre_fichero}: {e}")
+        return []
 
 
 def recorrer_y_procesar(directorio_raiz: str):
     """Recorre recursivamente el directorio raíz, procesa cada PDF encontrado y genera índices locales."""
-    # Lista global que acumulará los registros de todos los archivos
     historico_global = []
 
-    for root, dirs, files in os.walk(directorio_raiz):
+    for root, _dirs, files in os.walk(directorio_raiz):
         # Evitamos entrar en carpetas de salida ya creadas
         if "Marcados" in root:
             continue
@@ -348,7 +332,7 @@ def recorrer_y_procesar(directorio_raiz: str):
         if not pdf_files:
             continue
 
-        logging.info(f"\n--- Procesando carpeta: {root} ---")
+        logger.info(f"\n--- Procesando carpeta: {root} ---")
         carpeta_salida = os.path.join(root, "Marcados")
         if not os.path.exists(carpeta_salida):
             os.makedirs(carpeta_salida)
@@ -356,7 +340,6 @@ def recorrer_y_procesar(directorio_raiz: str):
         for archivo in pdf_files:
             ruta_completa = os.path.join(root, archivo)
 
-            # PROTECCIÓN: Cada archivo es una unidad independiente
             try:
                 # 1. Verificar TOC (si ya está marcado, extraemos info)
                 doc_tmp = fitz.open(ruta_completa)
@@ -364,7 +347,7 @@ def recorrer_y_procesar(directorio_raiz: str):
                 doc_tmp.close()
 
                 if tiene_marcadores:
-                    logging.info(f"Saltando y extrayendo TOC: {archivo}")
+                    logger.info(f"Saltando y extrayendo TOC: {archivo}")
                     datos = extraer_toc_existente(ruta_completa)
                     historico_global.extend(datos)
                 else:
@@ -373,45 +356,36 @@ def recorrer_y_procesar(directorio_raiz: str):
                     historico_global.extend(datos)
 
             except Exception as e:  # noqa: BLE001
-                # Si un archivo falla, lo anotamos pero el bucle NO se detiene
-                logging.error(
+                logger.error(
                     f"FALLO CRÍTICO en el archivo {archivo}: {e}. Continuando con el siguiente..."
                 )
-                continue  # Esta línea es la clave: salta al siguiente archivo sin detener el proceso global
+                continue
 
     # Una vez terminados todos los directorios, generamos el CSV único en la raíz
     if historico_global:
-        # Obtenemos la carpeta donde está guardado este script
         carpeta_del_script = os.path.dirname(os.path.abspath(__file__))
-        # Forzamos que el índice se guarde SIEMPRE en esa carpeta
         ruta_indice_unico = os.path.join(
             carpeta_del_script, "Indice_Global_Normativa.csv"
         )
 
-        # Comprobamos si el archivo ya existe para saber si debemos escribir cabecera
         archivo_existe = os.path.isfile(ruta_indice_unico)
 
-        # Abrimos en modo 'a' (append) para añadir al final
         with open(ruta_indice_unico, mode="a", encoding="utf-8-sig", newline="") as f:
             writer = csv.DictWriter(
                 f, fieldnames=["archivo", "pagina", "titulo"], delimiter=";"
             )
 
-            # Solo escribimos la cabecera si el archivo es nuevo
             if not archivo_existe:
                 writer.writeheader()
 
             writer.writerows(historico_global)
 
-        logging.info(f"\n>> ÍNDICE GLOBAL ACTUALIZADO: {ruta_indice_unico}")
+        logger.info(f"\n>> ÍNDICE GLOBAL ACTUALIZADO: {ruta_indice_unico}")
     else:
-        logging.warning(
-            "\nNo se encontraron datos nuevos para añadir al índice global."
-        )
+        logger.warning("\nNo se encontraron datos nuevos para añadir al índice global.")
 
 
-if __name__ == "__main__":
-    # Configuramos argparse para leer argumentos desde la línea de comandos
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Genera marcadores en PDFs y extrae un índice unificado."
     )
@@ -421,28 +395,45 @@ if __name__ == "__main__":
         type=str,
         help="Ruta al directorio a procesar (relativa o absoluta). Si no se indica, preguntará interactivamente.",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="INFO",
+        help="Nivel de detalle del log (por defecto: INFO)",
+    )
+    return parser.parse_args(argv)
 
-    args = parser.parse_args()
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    # Configuración del nivel de logging
+    log_level = getattr(logging, args.log_level.upper())
+    setup_logging(app_name="marcadores_pdf", level=log_level)
+
     directorio_base = args.directorio
 
-    # Si no se ha pasado por comando, lo preguntamos por consola
     if not directorio_base:
         directorio_base = input(
             "Introduce la ruta de la carpeta a procesar (deja en blanco para usar la carpeta actual './'): "
         ).strip()
 
-        # Si el usuario solo presiona Enter, asignamos "./"
         if not directorio_base:
             directorio_base = "./"
 
-    # Convertimos a ruta absoluta (opcional, pero hace que los logs sean más claros)
     directorio_base = os.path.abspath(directorio_base)
 
     if os.path.exists(directorio_base) and os.path.isdir(directorio_base):
-        logging.info(f"Iniciando procesado en el directorio: {directorio_base}")
+        logger.info(f"Iniciando procesado en el directorio: {directorio_base}")
         recorrer_y_procesar(directorio_base)
-        logging.info("\n¡PROCESO FINALIZADO CON ÉXITO!")
+        logger.info("\n¡PROCESO FINALIZADO CON ÉXITO!")
+        return 0
     else:
-        logging.error(
+        logger.error(
             f"El directorio especificado no existe o no es válido: {directorio_base}"
         )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
