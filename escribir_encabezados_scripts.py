@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Generador de Encabezados y Licencias (GPLv3)
@@ -19,7 +18,7 @@ import argparse
 import glob
 import os
 import sys
-from datetime import date
+from datetime import datetime, timezone
 
 # --- Funciones de Solicitud de Datos ---
 
@@ -70,7 +69,7 @@ def solicitar_detalles_script(nombre_archivo, modo_generico=False):
 
 def generar_encabezado(nombre_archivo, metadatos):
     """Genera el encabezado completo utilizando la plantilla y los metadatos."""
-    hoy = date.today()
+    hoy = datetime.now(tz=timezone.utc).date()
 
     # Quitar la extensión del nombre del archivo para usarlo como título principal
     nombre_base, _ = os.path.splitext(nombre_archivo)
@@ -230,7 +229,7 @@ def main():
             print(f"✅ Agregado encabezado a: {nombre_archivo}")
             archivos_procesados += 1
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"❌ Error al procesar {nombre_archivo}: {e}")
 
     print(f"\n--- Resumen: Se procesaron {archivos_procesados} archivos ---")

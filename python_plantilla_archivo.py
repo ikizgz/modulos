@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 """
 Título: [Nombre del script o módulo]
 Descripción: [Breve explicación de qué hace este archivo.]
