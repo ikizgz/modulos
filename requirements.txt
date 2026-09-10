@@ -1,8 +1,7 @@
 Pillow
-com
 opencv-python
 PyMuPDF
-google
+google-genai
 importlib_metadata
 openpyxl
 pandas
