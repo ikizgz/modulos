@@ -3,19 +3,13 @@
 Generador de requirements.txt por análisis estático de imports
 
 Uso:
-  python3 scripts/generate_requirements.py --input /ruta/al/proyecto --output requirements.txt
-
-Opciones principales:
-  --input, -i      Carpeta raíz a escanear (por defecto: .)
-  --output, -o    Ruta del archivo de salida (por defecto: requirements.txt)
-  --map-pypi, -m  Intentar mapear nombres de módulos comunes a nombres de paquetes PyPI
-  --use-env-mapping, -e  Intentar resolver módulos usando importlib.metadata (distribuciones instaladas en el entorno)
-  --include-local, -l  Incluir módulos locales del propio repositorio en la salida
-  --verbose, -v   Salida más detallada
+  python3 scripts/generate_requirements.py --input /ruta/al/proyecto --map-pypi --include-local --output requirements.txt
 
 Notas:
-  - El script usa ast para detectar imports estáticos; imports dinámicos o generados en tiempo de ejecución no siempre se detectan.
-  - Revisa manualmente el resultado: algunos módulos necesitan que pongas el nombre PyPI adecuado o añadas versiones.
+  - El script intenta resolver automáticamente los módulos usando el entorno actual (importlib.metadata).
+  - Si un módulo o subpaquete no está instalado en el entorno, extraerá hasta el segundo nivel (ej: google.genai).
+  - Si usamos --map-pypi, se aplicarán heurísticas para mapear módulos comunes a nombres de paquetes PyPI conocidos.
+  - Si usamos --include-local, se incluirán módulos locales en la salida, aunque normalmente se omiten.
 """
 
 import argparse
@@ -23,17 +17,32 @@ import ast
 import os
 import sys
 
-# Mapeos heurísticos comunes de top-level module -> PyPI package name
 COMMON_PYPI_MAP = {
-    "bs4": "beautifulsoup4",
-    "PIL": "Pillow",
+    # --- IA, Visión y Tratamiento de Imágenes ---
     "cv2": "opencv-python",
-    "fitz": "PyMuPDF",  # el módulo se importa como fitz pero el paquete PyPI es PyMuPDF
-    "yaml": "PyYAML",
+    "PIL": "Pillow",
+    "fitz": "PyMuPDF",
+    "skimage": "scikit-image",
+    # --- Ciencia de Datos y Machine Learning ---
     "sklearn": "scikit-learn",
+    "bs4": "beautifulsoup4",
+    "yaml": "PyYAML",
+    # --- Criptografía y Seguridad ---
     "Crypto": "pycryptodome",
+    "jose": "python-jose",
+    "jwt": "PyJWT",
+    # --- Utilidades web, Redes y APIs ---
+    "websocket": "websocket-client",
+    "telegram": "python-telegram-bot",
+    "attr": "attrs",
+    "serial": "pyserial",
+    "usb": "pyusb",
+    "dateutil": "python-dateutil",
+    "dotenv": "python-dotenv",
+    "magic": "python-magic",
+    # --- Automatización y GUIs ---
+    "wx": "wxPython",
     "setuptools": "setuptools",
-    "uno": "uno",  # LibreOffice UNO no siempre está en PyPI; mapear manualmente si hace falta
 }
 
 SKIP_DIRS = {
@@ -56,12 +65,6 @@ except ImportError:
         import importlib_metadata
     except ImportError:
         importlib_metadata = None
-
-
-def is_hidden(path, root):
-    rel = os.path.relpath(path, root)
-    parts = rel.split(os.sep)
-    return any(p.startswith(".") for p in parts if p)
 
 
 def find_py_files(root):
@@ -87,17 +90,25 @@ def extract_imports_from_file(path):
     except SyntaxError:
         return set()
     mods = set()
+
+    def process_name(full_name):
+        parts = full_name.split(".")
+        # Añadir el módulo raíz (ej: 'google')
+        mods.add(parts[0])
+        # Si tiene subpaquetes, añadir también el segundo nivel (ej: 'google.genai')
+        if len(parts) > 1:
+            mods.add(f"{parts[0]}.{parts[1]}")
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for n in node.names:
                 if n.name:
-                    mods.add(n.name.split(".")[0])
+                    process_name(n.name)
         elif isinstance(node, ast.ImportFrom):
-            # saltar imports relativos
             if node.level and node.module is None:
                 continue
             if node.module:
-                mods.add(node.module.split(".")[0])
+                process_name(node.module)
     return mods
 
 
@@ -156,38 +167,36 @@ def build_local_names(py_files, root):
 
 
 def build_env_package_map():
-    """Devuelve un dict top_level_module -> list(distribution_names) si importlib.metadata está disponible."""
     if importlib_metadata is None:
         return {}
     try:
-        pack_map = importlib_metadata.packages_distributions()
-        return pack_map
+        return importlib_metadata.packages_distributions()
     except (AttributeError, ImportError, OSError, ValueError):
         return {}
 
 
 def map_to_pypi(names, use_env_map=None):
-    """Mapea una lista de top-level modules a nombres de paquete PyPI.
-
-    Preferencias de mapeo:
-      1. Si use_env_map proporciona una distribución instalada para el top-level module, usar la primera distribución.
-      2. Si COMMON_PYPI_MAP tiene un mapeo heurístico, usarlo.
-      3. Si no, usar el nombre del módulo tal cual.
-    """
     out = []
     seen = set()
     for n in names:
         if not n or n in seen:
             continue
         pkg = None
+
+        # 1. Prioridad: Consulta de distribuciones instaladas en el entorno
         if use_env_map and n in use_env_map:
             dists = use_env_map.get(n)
             if dists:
                 pkg = dists[0]
+
+        # 2. Segunda opción: Mapa estático heurístico
         if pkg is None:
             pkg = COMMON_PYPI_MAP.get(n)
+
+        # 3. Si es un subpaquete sin mapear (ej: google.genai), no usar la raíz si es ambigua
         if pkg is None:
             pkg = n
+
         if pkg not in seen:
             out.append(pkg)
             seen.add(pkg)
@@ -208,13 +217,7 @@ def main():
         "--map-pypi",
         "-m",
         action="store_true",
-        help="Mapear módulos comunes a nombres de paquetes PyPI",
-    )
-    parser.add_argument(
-        "--use-env-mapping",
-        "-e",
-        action="store_true",
-        help="Usar importlib.metadata del entorno para mapear módulos a distribuciones",
+        help="Mapear módulos comunes a nombres de paquetes PyPI (siempre intenta usar entorno)",
     )
     parser.add_argument(
         "--include-local",
@@ -247,44 +250,37 @@ def main():
     for m in sorted(all_imports):
         if not m or m.startswith("_"):
             continue
-        if (m in stdlib) or (m in local_names):
+        # Descartar si el módulo raíz o el subpaquete pertenece a la librería estándar o local
+        root_mod = m.split(".")[0]
+        if (root_mod in stdlib) or (root_mod in local_names) or (m in local_names):
             if args.include_local and (m in local_names):
                 candidates.append(m)
             continue
         candidates.append(m)
 
-    env_map = None
-    if args.use_env_mapping:
-        env_map = build_env_package_map()
-        if args.verbose:
-            if importlib_metadata is None:
-                print(
-                    "importlib.metadata / importlib_metadata no disponible en este entorno; --use-env-mapping ignorado"
-                )
-            else:
-                print(f"Env mapping available for {len(env_map)} top-level packages")
+    # Cargar siempre la información del entorno si está disponible
+    env_map = build_env_package_map()
+    if args.verbose and env_map:
+        print(f"Mapa de entorno disponible para {len(env_map)} entradas de paquetes")
 
-    if args.map_pypi or args.use_env_mapping:
-        final = map_to_pypi(candidates, use_env_map=env_map)
-    else:
-        # mantener orden único
-        final = []
-        for c in candidates:
-            if c not in final:
-                final.append(c)
+    # Mapear los candidatos
+    mapped = map_to_pypi(candidates, use_env_map=env_map)
+
+    # Filtrado inteligente: Si conviven 'google' y 'google-genai' (o 'google.genai'),
+    # eliminar 'google' para no dejar dependencias genéricas redundantes
+    final = []
+    has_specific_subpkgs = any("." in item or "-" in item for item in mapped)
+    for item in mapped:
+        if item == "google" and has_specific_subpkgs:
+            continue
+        if item not in final:
+            final.append(item)
 
     out_path = os.path.abspath(args.output)
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.writelines(pkg + "\n" for pkg in final)
 
     print(f"Escrito {len(final)} entradas en {out_path}")
-    if args.verbose:
-        print("\nMódulos detectados (únicos):")
-        for m in sorted(all_imports):
-            print("  ", m)
-        print("\nLocal names (excluidos):")
-        for l in sorted(local_names):
-            print("  ", l)
 
 
 if __name__ == "__main__":

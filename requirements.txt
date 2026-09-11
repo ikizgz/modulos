@@ -2,7 +2,7 @@ Pillow
 opencv-python
 PyMuPDF
 google-genai
-importlib_metadata
+importlib-metadata
 openpyxl
 pandas
 pytesseract
