@@ -5,7 +5,7 @@ Script de Generación de Capa de Texto OCR para PDFs Escaneados Problemáticos
 ===============================================================================
 Propósito:
     Este script procesa documentos PDF escaneados con baja calidad de tinta,
-    fondos sucios o descoloridos (como escalafones antiguos). Aplica técnicas
+    fondos sucios o descoloridos (como documentos antiguos). Aplica técnicas
     de preprocesamiento de imagen con OpenCV (umbral adaptativo y reducción
     de ruido) para maximizar el contraste, ejecuta OCR con Tesseract, y
     genera un nuevo PDF searchable que conserva la imagen original pero

@@ -48,6 +48,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+logs/
 
 # Traducciones. Los archivos .mo y .pot se utilizan en la gestión de traducciones (i18n). Son archivos generados que se pueden recrear a partir de los archivos fuente de traducción.
 *.mo
