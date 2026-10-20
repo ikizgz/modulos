@@ -16,11 +16,11 @@ Requisitos previos:
     - Tesseract-OCR instalado en el sistema operativo y accesible en el PATH.
 
 Ejemplo de uso desde la terminal:
-    python3 ocr_pdf.py --input "Escalafon.pdf" --output "Escalafon_ocr.pdf"
+    python3 ocr_pdf.py --input "archivo.pdf" --output "archivo_ocr.pdf"
 
     (Si omites el parámetro --output, se llamará automáticamente añadiendo "_ocr.pdf").
 
-    python3 ocr_pdf.py --input "Escalafon.pdf" --max-paginas 3
+    python3 ocr_pdf.py --input "archivo.pdf" --max-paginas 3
     (Procesará únicamente las primeras 3 páginas para pruebas rápidas).
 ===============================================================================
 """

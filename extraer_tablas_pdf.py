@@ -13,7 +13,7 @@ Propósito:
 
 Requisitos previos:
     - Librerías instaladas: pip install google-genai pandas pymupdf openpyxl
-    - Clave de API configurada (en el script o como variable de entorno).
+    - Clave de API de Gemini configurada (en el script o como variable de entorno).
 
 Ejemplo de uso desde la terminal:
     python3 extraer_tablas_pdf.py --input "mi_escalafon.pdf" --output "resultado_final.xlsx"
@@ -99,11 +99,11 @@ def procesar_pdf_a_excel(
 
             # Prompt estructurado para guiar al modelo de visión
             prompt = """
-            Analiza esta imagen escaneada de un documento de tabla de datos/escalafón. 
+            Analiza esta imagen escaneada de un documento de tabla de datos.
             Extrae toda la información de la tabla con absoluta precisión.
-            Devuelve el resultado strictly en formato CSV (delimitado por comas), 
-            donde la primera línea sean los encabezados de las columnas y las siguientes los registros. 
-            No incluyas saludos, explicaciones, bloques de código markdown extra ni texto adicional, 
+            Devuelve el resultado strictly en formato CSV (delimitado por comas),
+            donde la primera línea sean los encabezados de las columnas y las siguientes los registros.
+            No incluyas saludos, explicaciones, bloques de código markdown extra ni texto adicional,
             únicamente el contenido tabular CSV limpio.
             """
 
@@ -221,7 +221,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_file = f"{base_name}.xlsx"
 
     # Clave de API configurada
-    MI_API_KEY = "AQ.Ab8RN6IY9HJaAxjIGewqFDEhk2FljyPRkdZLfRYivuRRdUL8CA"
+    MI_API_KEY = ""
 
     procesar_pdf_a_excel(
         pdf_path=args.input,

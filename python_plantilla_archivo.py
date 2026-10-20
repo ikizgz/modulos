@@ -38,5 +38,5 @@ if __name__ == "__main__":
     main()
     # Instrucciones de uso:
     # 1. Rellena los campos entre corchetes [ ] en el encabezado con la información correspondiente.
-    # 2. Añade tus funciones, clases y lógica del script debajo de este bloque.
+    # 2. Añade tus funciones, clases y lógica del script debajo de ese bloque.
     # 3. Usa help(nombre_script) para consultar la documentación desde el intérprete si lo necesitas.
